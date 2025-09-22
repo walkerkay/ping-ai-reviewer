@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    ports:
+      - "5001:5001"
+    environment:
+      - NODE_ENV=production
+      - PORT=5001
+      - MONGODB_URI=mongodb://mongodb:27017/ping-codereview
+      - LLM_PROVIDER=${LLM_PROVIDER:-deepseek}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - QWEN_API_KEY=${QWEN_API_KEY}
+      - ZHIPUAI_API_KEY=${ZHIPUAI_API_KEY}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://ollama:11434}
+      - GITLAB_ACCESS_TOKEN=${GITLAB_ACCESS_TOKEN}
+      - GITLAB_URL=${GITLAB_URL:-https://gitlab.com}
+      - GITHUB_ACCESS_TOKEN=${GITHUB_ACCESS_TOKEN}
+      - GITHUB_URL=${GITHUB_URL:-https://api.github.com}
+      - DINGTALK_ENABLED=${DINGTALK_ENABLED:-0}
+      - DINGTALK_WEBHOOK_URL=${DINGTALK_WEBHOOK_URL}
+      - WECOM_ENABLED=${WECOM_ENABLED:-0}
+      - WECOM_WEBHOOK_URL=${WECOM_WEBHOOK_URL}
+      - FEISHU_ENABLED=${FEISHU_ENABLED:-0}
+      - FEISHU_WEBHOOK_URL=${FEISHU_WEBHOOK_URL}
+      - SUPPORTED_EXTENSIONS=${SUPPORTED_EXTENSIONS:-.java,.py,.php,.yml,.vue,.go,.c,.cpp,.h,.js,.css,.md,.sql}
+      - PUSH_REVIEW_ENABLED=${PUSH_REVIEW_ENABLED:-0}
+      - REPORT_CRONTAB_EXPRESSION=${REPORT_CRONTAB_EXPRESSION:-0 18 * * 1-5}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    depends_on:
+      - mongodb
+    restart: unless-stopped
+
+  mongodb:
+    image: mongo:7.0
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_DATABASE=ping-codereview
+    volumes:
+      - mongodb_data:/data/db
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    restart: unless-stopped
+    # 可选：预拉取模型
+    # command: >
+    #   sh -c "ollama serve & 
+    #          sleep 10 && 
+    #          ollama pull llama2 && 
+    #          wait"
+
+volumes:
+  mongodb_data:
+  ollama_data:
