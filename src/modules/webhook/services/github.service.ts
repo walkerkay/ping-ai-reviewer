@@ -33,6 +33,8 @@ export class GitHubService {
       return response.data || [];
     } catch (error) {
       console.error('Failed to get pull request files:', error.message);
+      console.error('Request URL:', url);
+      console.error('Error details:', error.response?.data || error);
       return [];
     }
   }
@@ -53,6 +55,8 @@ export class GitHubService {
       return response.data || [];
     } catch (error) {
       console.error('Failed to get pull request commits:', error.message);
+      console.error('Request URL:', url);
+      console.error('Error details:', error.response?.data || error);
       return [];
     }
   }
@@ -123,6 +127,8 @@ export class GitHubService {
       return response.data.files || [];
     } catch (error) {
       console.error('Failed to get commit files:', error.message);
+      console.error('Request URL:', url);
+      console.error('Error details:', error.response?.data || error);
       return [];
     }
   }
@@ -181,3 +187,4 @@ export class GitHubService {
     };
   }
 }
+

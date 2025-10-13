@@ -138,3 +138,4 @@ ${JSON.stringify(commits, null, 2)}
     `.trim();
   }
 }
+

@@ -60,3 +60,4 @@ services:
 volumes:
   mongodb_data:
   ollama_data:
+

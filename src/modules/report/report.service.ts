@@ -134,3 +134,4 @@ export class ReportService {
     return await llmClient.generateReport(reportData);
   }
 }
+

@@ -58,3 +58,4 @@ export class GitHubWebhookDto {
   @IsOptional()
   after?: string;
 }
+

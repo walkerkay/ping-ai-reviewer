@@ -10,3 +10,4 @@ export interface LLMConfig {
   temperature?: number;
   maxTokens?: number;
 }
+

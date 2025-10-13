@@ -63,3 +63,4 @@ export class DingTalkNotifier implements Notifier {
     };
   }
 }
+

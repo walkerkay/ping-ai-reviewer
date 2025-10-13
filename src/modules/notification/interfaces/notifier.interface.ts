@@ -8,3 +8,4 @@ export interface Notifier {
   sendNotification(message: NotificationMessage): Promise<boolean>;
   isEnabled(): boolean;
 }
+

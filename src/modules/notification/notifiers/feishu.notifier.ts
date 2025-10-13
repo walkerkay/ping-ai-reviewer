@@ -70,3 +70,4 @@ export class FeishuNotifier implements Notifier {
     };
   }
 }
+

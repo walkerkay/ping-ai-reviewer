@@ -54,3 +54,4 @@ export const MergeRequestReviewSchema = SchemaFactory.createForClass(MergeReques
 MergeRequestReviewSchema.index({ updatedAt: -1 });
 MergeRequestReviewSchema.index({ projectName: 1 });
 MergeRequestReviewSchema.index({ author: 1 });
+

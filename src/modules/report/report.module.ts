@@ -11,3 +11,4 @@ import { NotificationModule } from '../notification/notification.module';
   providers: [ReportService],
 })
 export class ReportModule {}
+

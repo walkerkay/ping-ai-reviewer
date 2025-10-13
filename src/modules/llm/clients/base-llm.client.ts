@@ -39,3 +39,4 @@ export abstract class BaseLLMClient implements LLMClient {
     return this.configService.get<number>(`${this.provider.toUpperCase()}_MAX_TOKENS`) || this.config.maxTokens || 2000;
   }
 }
+

@@ -62,3 +62,4 @@ export class WeComNotifier implements Notifier {
     };
   }
 }
+

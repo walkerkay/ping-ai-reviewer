@@ -16,3 +16,4 @@ export class ReportController {
     return this.reportService.generateManualReport(start, end);
   }
 }
+

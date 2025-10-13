@@ -24,3 +24,4 @@ ENV NODE_ENV=production
 
 # 启动应用
 CMD ["npm", "run", "start:prod"]
+

@@ -11,3 +11,4 @@ import { FeishuNotifier } from './notifiers/feishu.notifier';
   exports: [NotificationService],
 })
 export class NotificationModule {}
+
