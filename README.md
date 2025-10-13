@@ -1,4 +1,4 @@
-# Ping Reviewer
+# Ping AI Reviewer
 
 基于 NestJS、MongoDB 和 TypeScript 的 AI 代码审查工具，支持 GitLab 和 GitHub 平台的自动化代码审查。
 
@@ -26,7 +26,7 @@
 1. **克隆项目**
 ```bash
 git clone <repository-url>
-cd ping-reviewer
+cd ping-ai-reviewer
 ```
 
 2. **配置环境变量**
@@ -81,7 +81,7 @@ npm run start:prod
 # 应用配置
 NODE_ENV=development
 PORT=5001
-MONGODB_URI=mongodb://localhost:27017/ping-reviewer
+MONGODB_URI=mongodb://localhost:27017/ping-ai-reviewer
 
 # LLM 配置（至少配置一个）
 LLM_PROVIDER=deepseek
