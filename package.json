@@ -1,5 +1,5 @@
 {
-  "name": "ping-codereview",
+  "name": "ping-reviewer",
   "version": "1.0.0",
   "description": "AI-powered code review tool with NestJS, MongoDB and TypeScript",
   "author": "",
