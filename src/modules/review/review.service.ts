@@ -5,6 +5,7 @@ import { LLMFactory } from '../llm/llm.factory';
 import { NotificationService } from '../notification/notification.service';
 import { GitLabService } from '../webhook/services/gitlab.service';
 import { GitHubService } from '../webhook/services/github.service';
+import * as crypto from 'crypto';
 
 @Injectable()
 export class ReviewService {
@@ -82,7 +83,11 @@ export class ReviewService {
 
   async handlePullRequest(parsedData: any): Promise<void> {
     try {
-      const { owner, repo, pullNumber, projectName, author, sourceBranch, targetBranch, url, webhookData } = parsedData;
+      const { action, pullNumber, owner, repo, projectName, author, sourceBranch, targetBranch, url, webhookData } = parsedData;
+
+      if(action === 'closed') {
+        return;
+      }
 
       // 获取变更文件
       const files = await this.githubService.getPullRequestFiles(owner, repo, pullNumber);
@@ -90,6 +95,22 @@ export class ReviewService {
 
       if (filteredChanges.length === 0) {
         console.log('No supported file changes found');
+        return;
+      }
+
+      // 生成文件变更哈希
+      const filesHash = this.generateFilesHash(filteredChanges);
+
+      // 检查是否已经存在相同的文件变更
+      const hasExistingReview = await this.databaseService.checkMergeRequestFilesHashExists(
+        projectName,
+        sourceBranch,
+        targetBranch,
+        filesHash
+      );
+
+      if (hasExistingReview) {
+        console.log('Files have not changed, skipping review generation');
         return;
       }
 
@@ -119,6 +140,7 @@ export class ReviewService {
         additions,
         deletions,
         lastCommitId: '',
+        lastChangeHash: filesHash,
       });
 
       // 添加评论到Pull Request
@@ -128,6 +150,7 @@ export class ReviewService {
       await this.notificationService.sendNotification({
         content: reviewResult,
         title: `代码审查 - ${projectName}`,
+        prTitle: webhookData?.pull_request?.title,
         msgType: 'markdown',
       });
 
@@ -295,6 +318,29 @@ export class ReviewService {
       .replace(/[^a-zA-Z0-9]/g, '_')
       .replace(/_+/g, '_')
       .replace(/^_|_$/g, '');
+  }
+
+  /**
+   * 生成文件变更的哈希值
+   * @param changes 文件变更列表
+   * @returns 哈希值
+   */
+  private generateFilesHash(changes: any[]): string {
+    // 使用文件变更内容的哈希，而不是文件本身的SHA
+    // 这样可以检测到相同的文件变更，避免重复生成Review
+    const changeContent = changes
+      .map(change => ({
+        path: change.filename || change.new_path,
+        additions: change.additions || 0,
+        deletions: change.deletions || 0,
+        patch: change.patch || change.diff || '',
+      }))
+      .sort((a, b) => a.path.localeCompare(b.path)) // 按路径排序确保一致性
+      .map(change => `${change.path}:${change.additions}:${change.deletions}:${change.patch}`)
+      .join('|');
+
+    // 生成SHA256哈希
+    return crypto.createHash('sha256').update(changeContent).digest('hex');
   }
 }
 

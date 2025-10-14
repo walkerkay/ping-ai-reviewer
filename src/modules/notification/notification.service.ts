@@ -3,6 +3,7 @@ import { NotificationMessage } from './interfaces/notifier.interface';
 import { DingTalkNotifier } from './notifiers/dingtalk.notifier';
 import { WeComNotifier } from './notifiers/wecom.notifier';
 import { FeishuNotifier } from './notifiers/feishu.notifier';
+import { PingCodeNotifier } from './notifiers/pingcode.notifier';
 
 @Injectable()
 export class NotificationService {
@@ -10,6 +11,7 @@ export class NotificationService {
     private dingTalkNotifier: DingTalkNotifier,
     private weComNotifier: WeComNotifier,
     private feishuNotifier: FeishuNotifier,
+    private pingCodeNotifier: PingCodeNotifier,
   ) {}
 
   async sendNotification(message: NotificationMessage): Promise<void> {
@@ -25,6 +27,10 @@ export class NotificationService {
 
     if (this.feishuNotifier.isEnabled()) {
       promises.push(this.feishuNotifier.sendNotification(message));
+    }
+
+    if (this.pingCodeNotifier.isEnabled()) {
+      promises.push(this.pingCodeNotifier.sendNotification(message));
     }
 
     if (promises.length === 0) {

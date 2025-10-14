@@ -1,6 +1,7 @@
 export interface NotificationMessage {
   content: string;
   title?: string;
+  prTitle?: string;
   msgType?: 'text' | 'markdown';
 }
 

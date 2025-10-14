@@ -46,6 +46,9 @@ export class MergeRequestReview {
 
   @Prop({ default: '' })
   lastCommitId: string;
+
+  @Prop({ default: '' })
+  lastChangeHash: string;
 }
 
 export const MergeRequestReviewSchema = SchemaFactory.createForClass(MergeRequestReview);

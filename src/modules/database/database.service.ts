@@ -68,6 +68,23 @@ export class DatabaseService {
     return count > 0;
   }
 
+  async checkMergeRequestFilesHashExists(
+    projectName: string,
+    sourceBranch: string,
+    targetBranch: string,
+    filesHash: string,
+  ): Promise<boolean> {
+    const count = await this.mergeRequestReviewModel
+      .countDocuments({
+        projectName,
+        sourceBranch,
+        targetBranch,
+        lastChangeHash: filesHash,
+      })
+      .exec();
+    return count > 0;
+  }
+
   // Push Review 相关方法
   async createPushReview(reviewData: Partial<PushReview>): Promise<PushReview> {
     const review = new this.pushReviewModel(reviewData);
