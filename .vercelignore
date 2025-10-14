@@ -1,0 +1,41 @@
+# 开发文件
+src/
+test/
+*.spec.ts
+*.test.ts
+
+# 配置文件
+.env
+.env.local
+.env.development
+.env.test
+
+# 日志文件
+*.log
+logs/
+
+# 临时文件
+tmp/
+temp/
+
+# IDE文件
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 操作系统文件
+.DS_Store
+Thumbs.db
+
+# Git文件
+.git/
+.gitignore
+
+# 文档
+README.md
+docs/
+
+# 其他
+coverage/
+.nyc_output/
