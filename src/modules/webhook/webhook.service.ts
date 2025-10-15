@@ -36,33 +36,23 @@ export class WebhookService {
 
   async handleGitHubWebhook(webhookData: any, eventType: string): Promise<{ message: string }> {
     try {
-      console.log('=== WEBHOOK SERVICE - GitHub ===');
-      console.log('Event type:', eventType);
-      console.log('Webhook data keys:', Object.keys(webhookData));
-      
       const parsedData = this.githubService.parseWebhookData(webhookData, eventType);
-      console.log('Parsed data:', JSON.stringify(parsedData, null, 2));
       
       if (!parsedData) {
-        console.log('Unsupported GitHub event type:', eventType);
         return { message: 'Unsupported GitHub event type' };
       }
 
       if (parsedData.eventType === 'pull_request') {
-        console.log('Processing pull request event...');
         await this.reviewService.handlePullRequest(parsedData);
         return { message: 'GitHub pull request event processed asynchronously' };
       } else if (parsedData.eventType === 'push') {
-        console.log('Processing push event...');
         await this.reviewService.handlePush(parsedData);
         return { message: 'GitHub push event processed asynchronously' };
       }
 
-      console.log('Unknown event type:', parsedData.eventType);
       return { message: 'GitHub event processed' };
     } catch (error) {
       console.error('GitHub webhook processing failed:', error.message);
-      console.error('Error stack:', error.stack);
       return { message: 'GitHub webhook processing failed' };
     }
   }

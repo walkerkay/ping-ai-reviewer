@@ -83,38 +83,15 @@ export class ReviewService {
 
   async handlePullRequest(parsedData: any): Promise<void> {
     try {
-      console.log('=== REVIEW SERVICE - handlePullRequest ===');
-      console.log('Parsed data received:', JSON.stringify(parsedData, null, 2));
-      
       const { action, pullNumber, owner, repo, projectName, author, sourceBranch, targetBranch, url, webhookData } = parsedData;
-      console.log('Extracted values:', {
-        action,
-        pullNumber,
-        owner,
-        repo,
-        projectName,
-        author,
-        sourceBranch,
-        targetBranch,
-        url,
-        hasWebhookData: !!webhookData
-      });
 
       if(action === 'closed') {
-        console.log('Pull request is closed, skipping review');
         return;
       }
 
       // 获取变更文件
-      console.log('Getting pull request files...');
-      console.log('Request parameters:', { owner, repo, pullNumber });
-      
       const files = await this.githubService.getPullRequestFiles(owner, repo, pullNumber);
-      console.log('Raw files from GitHub:', files.length, 'files');
-      console.log('Files details:', files.map(f => ({ filename: f.filename, additions: f.additions, deletions: f.deletions })));
-      
       const filteredChanges = this.filterGitHubChanges(files);
-      console.log('Filtered changes:', filteredChanges.length, 'files');
 
       if (filteredChanges.length === 0) {
         console.log('No supported file changes found');
@@ -122,19 +99,15 @@ export class ReviewService {
       }
 
       // 生成文件变更哈希
-      console.log('Generating files hash...');
       const filesHash = this.generateFilesHash(filteredChanges);
-      console.log('Files hash:', filesHash);
 
       // 检查是否已经存在相同的文件变更
-      console.log('Checking for existing review...');
       const hasExistingReview = await this.databaseService.checkMergeRequestFilesHashExists(
         projectName,
         sourceBranch,
         targetBranch,
         filesHash
       );
-      console.log('Has existing review:', hasExistingReview);
 
       if (hasExistingReview) {
         console.log('Files have not changed, skipping review generation');
@@ -142,23 +115,17 @@ export class ReviewService {
       }
 
       // 获取提交信息
-      console.log('Getting pull request commits...');
       const commits = await this.githubService.getPullRequestCommits(owner, repo, pullNumber);
-      console.log('Commits count:', commits.length);
       const commitMessages = commits.map(commit => commit.commit.message).join('; ');
-      console.log('Commit messages:', commitMessages);
 
       // 生成代码审查
-      console.log('Generating code review...');
       const reviewResult = await this.generateCodeReview(filteredChanges, commitMessages);
-      console.log('Review result generated, length:', reviewResult.length);
 
       // 保存到数据库
-      console.log('Preparing database save...');
       const additions = filteredChanges.reduce((sum, change) => sum + (change.additions || 0), 0);
       const deletions = filteredChanges.reduce((sum, change) => sum + (change.deletions || 0), 0);
-      
-      const reviewData = {
+
+      await this.databaseService.createMergeRequestReview({
         projectName,
         author,
         sourceBranch,
@@ -174,18 +141,7 @@ export class ReviewService {
         deletions,
         lastCommitId: '',
         lastChangeHash: filesHash,
-      };
-      
-      console.log('Review data to save:', JSON.stringify(reviewData, null, 2));
-      console.log('Branch values being saved:', {
-        sourceBranch: reviewData.sourceBranch,
-        targetBranch: reviewData.targetBranch,
-        sourceBranchType: typeof reviewData.sourceBranch,
-        targetBranchType: typeof reviewData.targetBranch
       });
-      
-      await this.databaseService.createMergeRequestReview(reviewData);
-      console.log('Merge request review saved to database successfully');
 
       // 添加评论到Pull Request
       await this.githubService.createPullRequestComment(owner, repo, pullNumber, reviewResult);
@@ -205,11 +161,7 @@ export class ReviewService {
 
   async handlePush(parsedData: any): Promise<void> {
     try {
-      console.log('=== REVIEW SERVICE - handlePush ===');
-      console.log('Parsed data received:', JSON.stringify(parsedData, null, 2));
-      
       const pushReviewEnabled = this.configService.get<string>('PUSH_REVIEW_ENABLED') === '1';
-      console.log('Push review enabled:', pushReviewEnabled);
       
       if (!pushReviewEnabled) {
         console.log('Push review is disabled');
@@ -217,20 +169,6 @@ export class ReviewService {
       }
 
       const { projectName, author, branchName, commits, webhookData } = parsedData;
-      console.log('Extracted values:', {
-        projectName,
-        author,
-        branchName,
-        commitsCount: commits?.length || 0,
-        hasWebhookData: !!webhookData
-      });
-
-      // 添加 branchName 验证
-      if (!branchName || branchName.trim() === '') {
-        console.log('ERROR: Branch name is missing or empty, skipping push review');
-        console.log('Branch name value:', branchName);
-        return;
-      }
 
       if (!commits || commits.length === 0) {
         console.log('No commits found in push event');
@@ -238,34 +176,20 @@ export class ReviewService {
       }
 
       // 获取变更文件
-      console.log('Getting file changes...');
       let changes = [];
       if (parsedData.eventType === 'push' && parsedData.owner && parsedData.repo) {
         // GitHub push
-        console.log('Processing GitHub push event');
         const lastCommit = commits[commits.length - 1];
-        console.log('Last commit:', lastCommit);
-        console.log('Getting commit files for:', {
-          owner: parsedData.owner,
-          repo: parsedData.repo,
-          commitId: lastCommit.id
-        });
-        
         changes = await this.githubService.getCommitFiles(parsedData.owner, parsedData.repo, lastCommit.id);
-        console.log('Raw changes from GitHub:', changes.length, 'files');
         changes = this.filterGitHubChanges(changes);
-        console.log('Filtered changes:', changes.length, 'files');
       } else if (parsedData.eventType === 'push' && parsedData.projectId) {
         // GitLab push
-        console.log('Processing GitLab push event');
         changes = await this.gitlabService.getRepositoryCompare(
           parsedData.projectId,
           parsedData.before,
           parsedData.after
         );
-        console.log('Raw changes from GitLab:', changes.length, 'files');
         changes = this.filterChanges(changes);
-        console.log('Filtered changes:', changes.length, 'files');
       }
 
       if (changes.length === 0) {
@@ -274,18 +198,14 @@ export class ReviewService {
       }
 
       // 生成代码审查
-      console.log('Generating code review...');
       const commitMessages = commits.map(commit => commit.message).join('; ');
-      console.log('Commit messages:', commitMessages);
       const reviewResult = await this.generateCodeReview(changes, commitMessages);
-      console.log('Review result generated, length:', reviewResult.length);
 
       // 保存到数据库
-      console.log('Preparing database save...');
       const additions = changes.reduce((sum, change) => sum + (change.additions || 0), 0);
       const deletions = changes.reduce((sum, change) => sum + (change.deletions || 0), 0);
-      
-      const reviewData = {
+
+      await this.databaseService.createPushReview({
         projectName,
         author,
         branch: branchName,
@@ -297,15 +217,7 @@ export class ReviewService {
         webhookData,
         additions,
         deletions,
-      };
-      
-      console.log('Review data to save:', JSON.stringify(reviewData, null, 2));
-      console.log('Branch value being saved:', reviewData.branch);
-      console.log('Branch type:', typeof reviewData.branch);
-      console.log('Branch length:', reviewData.branch?.length);
-      
-      await this.databaseService.createPushReview(reviewData);
-      console.log('Push review saved to database successfully');
+      });
 
       // 添加评论到提交
       if (parsedData.eventType === 'push' && parsedData.owner && parsedData.repo) {
