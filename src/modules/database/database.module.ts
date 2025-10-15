@@ -7,8 +7,8 @@ import { DatabaseService } from './database.service';
 @Module({
   imports: [
     MongooseModule.forFeature([
-      { name: MergeRequestReview.name, schema: MergeRequestReviewSchema },
-      { name: PushReview.name, schema: PushReviewSchema },
+      { name: 'MergeRequestReview', schema: MergeRequestReviewSchema },
+      { name: 'PushReview', schema: PushReviewSchema },
     ]),
   ],
   providers: [DatabaseService],
