@@ -1,5 +1,4 @@
 # 开发文件
-src/
 test/
 *.spec.ts
 *.test.ts
