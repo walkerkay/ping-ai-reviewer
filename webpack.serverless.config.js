@@ -2,7 +2,7 @@ const path = require('path');
 
 module.exports = {
   mode: 'production',
-  entry: './src/main.serverless.ts',
+  entry: path.resolve(__dirname, 'src/main.serverless.ts'),
   target: 'node',
   output: {
     path: path.resolve(__dirname, 'dist'),
@@ -13,16 +13,25 @@ module.exports = {
     rules: [
       {
         test: /\.ts$/,
-        use: 'ts-loader',
+        use: {
+          loader: 'ts-loader',
+          options: {
+            configFile: path.resolve(__dirname, 'tsconfig.json'),
+          },
+        },
         exclude: /node_modules/,
       },
     ],
   },
   resolve: {
     extensions: ['.ts', '.js'],
+    modules: [path.resolve(__dirname, 'src'), 'node_modules'],
   },
   externals: {
     // 排除不需要打包的模块
     'aws-sdk': 'aws-sdk',
+  },
+  stats: {
+    errorDetails: true,
   },
 };
