@@ -1,5 +1,10 @@
+export interface ReviewResult {
+  summary: string;
+  detail: string;
+}
+
 export interface LLMClient {
-  generateReview(diff: string, commitMessages: string): Promise<string>;
+  generateReview(diff: string, commitMessages: string): Promise<ReviewResult>;
   generateReport(commits: any[]): Promise<string>;
 }
 

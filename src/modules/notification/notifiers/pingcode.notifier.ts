@@ -2,7 +2,10 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
-import { Notifier, NotificationMessage } from '../interfaces/notifier.interface';
+import {
+  Notifier,
+  NotificationMessage,
+} from '../interfaces/notifier.interface';
 
 @Injectable()
 export class PingCodeNotifier implements Notifier {
@@ -20,11 +23,15 @@ export class PingCodeNotifier implements Notifier {
     this.enabled = this.configService.get<string>('PINGCODE_ENABLED') === '1';
     this.apiUrl = this.configService.get<string>('PINGCODE_API_URL');
     this.clientId = this.configService.get<string>('PINGCODE_CLIENT_ID');
-    this.clientSecret = this.configService.get<string>('PINGCODE_CLIENT_SECRET');
+    this.clientSecret = this.configService.get<string>(
+      'PINGCODE_CLIENT_SECRET',
+    );
   }
 
   isEnabled(): boolean {
-    return this.enabled && !!this.apiUrl && !!this.clientId && !!this.clientSecret;
+    return (
+      this.enabled && !!this.apiUrl && !!this.clientId && !!this.clientSecret
+    );
   }
 
   async sendNotification(message: NotificationMessage): Promise<boolean> {
@@ -42,10 +49,12 @@ export class PingCodeNotifier implements Notifier {
 
       // 创建评论内容
       const commentContent = this.buildCommentContent(message);
-      
+
       // 从消息内容中提取工作项标识符
-      const workItemIdentifier = this.extractWorkItemIdentifier(message.prTitle);
-      
+      const workItemIdentifier = this.extractWorkItemIdentifier(
+        message.additions?.pullRequest?.title,
+      );
+
       if (!workItemIdentifier) {
         console.log('No work item identifier found in message content');
         return false;
@@ -53,9 +62,11 @@ export class PingCodeNotifier implements Notifier {
 
       // 获取工作项 ID
       const workItemId = await this.getWorkItemId(workItemIdentifier, token);
-      
+
       if (!workItemId) {
-        console.log(`Work item not found for identifier: ${workItemIdentifier}`);
+        console.log(
+          `Work item not found for identifier: ${workItemIdentifier}`,
+        );
         return false;
       }
 
@@ -63,18 +74,18 @@ export class PingCodeNotifier implements Notifier {
       const response = await firstValueFrom(
         this.httpService.post(
           `${this.apiUrl}/v1/comments`,
-          { 
+          {
             content: commentContent,
             principal_type: 'work_item',
             principal_id: workItemId,
           },
           {
             headers: {
-              'Authorization': `Bearer ${token}`,
+              Authorization: `Bearer ${token}`,
               'Content-Type': 'application/json',
             },
-          }
-        )
+          },
+        ),
       );
 
       return response.status === 200 || response.status === 201;
@@ -86,16 +97,12 @@ export class PingCodeNotifier implements Notifier {
 
   private buildCommentContent(message: NotificationMessage): string {
     let content = '';
-    
-    if (message.title) {
-      content += `## ${message.title}\n\n`;
+
+    if (message.additions?.pullRequest?.title) {
+      content += `🔗 URL: ${message.additions?.pullRequest?.url}\n`;
     }
-    
     content += message.content;
-    
-    // 添加时间戳
-    content += `\n\n---\n*自动生成于 ${new Date().toLocaleString('zh-CN')}*`;
-    
+
     return content;
   }
 
@@ -107,37 +114,37 @@ export class PingCodeNotifier implements Notifier {
 
   private async getValidAccessToken(): Promise<string | null> {
     const now = Math.floor(Date.now() / 1000);
-    
+
     // 如果令牌不存在或即将过期（提前5分钟刷新），则获取新令牌
     if (!this.accessToken || this.tokenExpiresAt <= now + 300) {
       return await this.refreshAccessToken();
     }
-    
+
     return this.accessToken;
   }
 
   private async refreshAccessToken(): Promise<string | null> {
     try {
       const response = await firstValueFrom(
-        this.httpService.get(
-          `${this.apiUrl}/v1/auth/token`,
-          {
-            params: {
-              grant_type: 'client_credentials',
-              client_id: this.clientId,
-              client_secret: this.clientSecret,
-            },
-            headers: {
-              'Content-Type': 'application/x-www-form-urlencoded',
-            },
-          }
-        )
+        this.httpService.get(`${this.apiUrl}/v1/auth/token`, {
+          params: {
+            grant_type: 'client_credentials',
+            client_id: this.clientId,
+            client_secret: this.clientSecret,
+          },
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+        }),
       );
 
       if (response.data && response.data.access_token) {
         this.accessToken = response.data.access_token;
         // 设置令牌过期时间（提前1小时过期以确保安全）
-        this.tokenExpiresAt = Math.floor(Date.now() / 1000) + (response.data.expires_in || 3600) - 3600;
+        this.tokenExpiresAt =
+          Math.floor(Date.now() / 1000) +
+          (response.data.expires_in || 3600) -
+          3600;
         console.log('PingCode access token refreshed successfully');
         return this.accessToken;
       }
@@ -149,31 +156,38 @@ export class PingCodeNotifier implements Notifier {
     }
   }
 
-  private async getWorkItemId(identifier: string, token: string): Promise<string | null> {
+  private async getWorkItemId(
+    identifier: string,
+    token: string,
+  ): Promise<string | null> {
     try {
       const response = await firstValueFrom(
-        this.httpService.get(
-          `${this.apiUrl}/v1/project/work_items`,
-          {
-            params: {
-              identifier: identifier,
-            },
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json',
-            },
-          }
-        )
+        this.httpService.get(`${this.apiUrl}/v1/project/work_items`, {
+          params: {
+            identifier: identifier,
+          },
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        }),
       );
 
       // 假设 API 返回的工作项数据中包含 id 字段
-      if (response.data && response.data.values && response.data.values.length > 0) {
+      if (
+        response.data &&
+        response.data.values &&
+        response.data.values.length > 0
+      ) {
         return response.data.values[0].id;
       }
 
       return null;
     } catch (error) {
-      console.error(`Failed to get work item ID for identifier ${identifier}:`, error.message);
+      console.error(
+        `Failed to get work item ID for identifier ${identifier}:`,
+        error.message,
+      );
       return null;
     }
   }
