@@ -33,7 +33,10 @@ export class ReviewService {
         return;
       }
       // 获取变更文件
-      const changes = await this.gitlabService.getMergeRequestChanges(projectId, mergeRequestIid);
+      const changes = await this.gitlabService.getMergeRequestChanges(
+        projectId,
+        mergeRequestIid,
+      );
       const filteredChanges = this.filterChanges(changes);
 
       if (filteredChanges.length === 0) {
@@ -42,15 +45,27 @@ export class ReviewService {
       }
 
       // 获取提交信息
-      const commits = await this.gitlabService.getMergeRequestCommits(projectId, mergeRequestIid);
-      const commitMessages = commits.map(commit => commit.message).join('; ');
+      const commits = await this.gitlabService.getMergeRequestCommits(
+        projectId,
+        mergeRequestIid,
+      );
+      const commitMessages = commits.map((commit) => commit.message).join('; ');
 
       // 生成代码审查
-      const reviewResult = await this.generateCodeReview(filteredChanges, commitMessages);
+      const reviewResult = await this.generateCodeReview(
+        filteredChanges,
+        commitMessages,
+      );
 
       // 保存到数据库
-      const additions = filteredChanges.reduce((sum, change) => sum + (change.additions || 0), 0);
-      const deletions = filteredChanges.reduce((sum, change) => sum + (change.deletions || 0), 0);
+      const additions = filteredChanges.reduce(
+        (sum, change) => sum + (change.additions || 0),
+        0,
+      );
+      const deletions = filteredChanges.reduce(
+        (sum, change) => sum + (change.deletions || 0),
+        0,
+      );
       const lastCommitId = commits[commits.length - 1]?.id || '';
 
       await this.databaseService.createMergeRequestReview({
@@ -60,9 +75,9 @@ export class ReviewService {
         targetBranch,
         updatedAt: Date.now(),
         commitMessages,
-        score: this.calculateScore(reviewResult.overall),
+        score: this.calculateScore(reviewResult.detail),
         url,
-        reviewResult: reviewResult.overall,
+        reviewResult: reviewResult.detail,
         urlSlug: this.slugifyUrl(url),
         webhookData,
         additions,
@@ -89,15 +104,20 @@ export class ReviewService {
       }
 
       // 添加评论到Merge Request
-      await this.gitlabService.addMergeRequestNote(projectId, mergeRequestIid, reviewResult.overall);
+      await this.gitlabService.addMergeRequestNote(
+        projectId,
+        mergeRequestIid,
+        reviewResult.detail,
+      );
 
-      // 发送通知
-      await this.notificationService.sendNotification({
-        content: reviewResult.overall,
-        title: `代码审查 - ${projectName}`,
-        msgType: 'markdown',
-      });
-
+      if (reviewResult.summary) {
+        // 发送通知
+        await this.notificationService.sendNotification({
+          content: reviewResult.summary,
+          title: `PingReviewer - ${projectName}`,
+          msgType: 'text',
+        });
+      }
     } catch (error) {
       console.error('Merge request review failed:', error.message);
     }
@@ -105,14 +125,29 @@ export class ReviewService {
 
   async handlePullRequest(parsedData: any): Promise<void> {
     try {
-      const { action, pullNumber, owner, repo, projectName, author, sourceBranch, targetBranch, url, webhookData } = parsedData;
+      const {
+        action,
+        pullNumber,
+        owner,
+        repo,
+        projectName,
+        author,
+        sourceBranch,
+        targetBranch,
+        url,
+        webhookData,
+      } = parsedData;
 
       if (action === 'closed') {
         return;
       }
 
       // 获取变更文件
-      const files = await this.githubService.getPullRequestFiles(owner, repo, pullNumber);
+      const files = await this.githubService.getPullRequestFiles(
+        owner,
+        repo,
+        pullNumber,
+      );
       const filteredChanges = this.filterGitHubChanges(files);
 
       if (filteredChanges.length === 0) {
@@ -124,12 +159,13 @@ export class ReviewService {
       const filesHash = this.generateFilesHash(filteredChanges);
 
       // 检查是否已经存在相同的文件变更
-      const hasExistingReview = await this.databaseService.checkMergeRequestFilesHashExists(
-        projectName,
-        sourceBranch,
-        targetBranch,
-        filesHash
-      );
+      const hasExistingReview =
+        await this.databaseService.checkMergeRequestFilesHashExists(
+          projectName,
+          sourceBranch,
+          targetBranch,
+          filesHash,
+        );
 
       if (hasExistingReview) {
         console.log('Files have not changed, skipping review generation');
@@ -137,15 +173,30 @@ export class ReviewService {
       }
 
       // 获取提交信息
-      const commits = await this.githubService.getPullRequestCommits(owner, repo, pullNumber);
-      const commitMessages = commits.map(commit => commit.commit.message).join('; ');
+      const commits = await this.githubService.getPullRequestCommits(
+        owner,
+        repo,
+        pullNumber,
+      );
+      const commitMessages = commits
+        .map((commit) => commit.commit.message)
+        .join('; ');
 
       // 生成代码审查
-      const reviewResult = await this.generateCodeReview(filteredChanges, commitMessages);
+      const reviewResult = await this.generateCodeReview(
+        filteredChanges,
+        commitMessages,
+      );
 
       // 保存到数据库
-      const additions = filteredChanges.reduce((sum, change) => sum + (change.additions || 0), 0);
-      const deletions = filteredChanges.reduce((sum, change) => sum + (change.deletions || 0), 0);
+      const additions = filteredChanges.reduce(
+        (sum, change) => sum + (change.additions || 0),
+        0,
+      );
+      const deletions = filteredChanges.reduce(
+        (sum, change) => sum + (change.deletions || 0),
+        0,
+      );
 
       await this.databaseService.createMergeRequestReview({
         projectName,
@@ -154,9 +205,9 @@ export class ReviewService {
         targetBranch,
         updatedAt: Date.now(),
         commitMessages,
-        score: this.calculateScore(reviewResult.overall),
+        score: this.calculateScore(reviewResult.detail),
         url,
-        reviewResult: reviewResult.overall,
+        reviewResult: reviewResult.detail,
         urlSlug: this.slugifyUrl(url),
         webhookData,
         additions,
@@ -181,16 +232,27 @@ export class ReviewService {
       }
 
       // 添加评论到Pull Request
-      await this.githubService.createPullRequestComment(owner, repo, pullNumber, reviewResult.overall);
+      await this.githubService.createPullRequestComment(
+        owner,
+        repo,
+        pullNumber,
+        reviewResult.detail,
+      );
 
-      // 发送通知
-      await this.notificationService.sendNotification({
-        content: reviewResult.overall,
-        title: `代码审查 - ${projectName}`,
-        prTitle: webhookData?.pull_request?.title,
-        msgType: 'markdown',
-      });
-
+      if (reviewResult.summary) {
+        // 发送通知
+        await this.notificationService.sendNotification({
+          content: reviewResult.summary,
+          title: `PingReviewer - ${projectName}`,
+          msgType: 'text',
+          additions: {
+            pullRequest: {
+              title: webhookData?.pull_request?.title,
+              url: webhookData?.pull_request?.html_url,
+            },
+          },
+        });
+      }
     } catch (error) {
       console.error('Pull request review failed:', error.message);
     }
@@ -198,14 +260,16 @@ export class ReviewService {
 
   async handlePush(parsedData: any): Promise<void> {
     try {
-      const pushReviewEnabled = this.configService.get<string>('PUSH_REVIEW_ENABLED') === '1';
+      const pushReviewEnabled =
+        this.configService.get<string>('PUSH_REVIEW_ENABLED') === '1';
 
       if (!pushReviewEnabled) {
         console.log('Push review is disabled');
         return;
       }
 
-      const { projectName, author, branchName, commits, webhookData } = parsedData;
+      const { projectName, author, branchName, commits, webhookData } =
+        parsedData;
 
       if (!commits || commits.length === 0) {
         console.log('No commits found in push event');
@@ -214,17 +278,25 @@ export class ReviewService {
 
       // 获取变更文件
       let changes = [];
-      if (parsedData.eventType === 'push' && parsedData.owner && parsedData.repo) {
+      if (
+        parsedData.eventType === 'push' &&
+        parsedData.owner &&
+        parsedData.repo
+      ) {
         // GitHub push
         const lastCommit = commits[commits.length - 1];
-        changes = await this.githubService.getCommitFiles(parsedData.owner, parsedData.repo, lastCommit.id);
+        changes = await this.githubService.getCommitFiles(
+          parsedData.owner,
+          parsedData.repo,
+          lastCommit.id,
+        );
         changes = this.filterGitHubChanges(changes);
       } else if (parsedData.eventType === 'push' && parsedData.projectId) {
         // GitLab push
         changes = await this.gitlabService.getRepositoryCompare(
           parsedData.projectId,
           parsedData.before,
-          parsedData.after
+          parsedData.after,
         );
         changes = this.filterChanges(changes);
       }
@@ -235,12 +307,21 @@ export class ReviewService {
       }
 
       // 生成代码审查
-      const commitMessages = commits.map(commit => commit.message).join('; ');
-      const reviewResult = await this.generateCodeReview(changes, commitMessages);
+      const commitMessages = commits.map((commit) => commit.message).join('; ');
+      const reviewResult = await this.generateCodeReview(
+        changes,
+        commitMessages,
+      );
 
       // 保存到数据库
-      const additions = changes.reduce((sum, change) => sum + (change.additions || 0), 0);
-      const deletions = changes.reduce((sum, change) => sum + (change.deletions || 0), 0);
+      const additions = changes.reduce(
+        (sum, change) => sum + (change.additions || 0),
+        0,
+      );
+      const deletions = changes.reduce(
+        (sum, change) => sum + (change.deletions || 0),
+        0,
+      );
 
       await this.databaseService.createPushReview({
         projectName,
@@ -248,8 +329,8 @@ export class ReviewService {
         branch: branchName,
         updatedAt: Date.now(),
         commitMessages,
-        score: this.calculateScore(reviewResult.overall),
-        reviewResult: reviewResult.overall,
+        score: this.calculateScore(reviewResult.detail),
+        reviewResult: reviewResult.detail,
         urlSlug: this.slugifyUrl(parsedData.projectUrl || ''),
         webhookData,
         additions,
@@ -257,23 +338,37 @@ export class ReviewService {
       });
 
       // 添加评论到提交
-      if (parsedData.eventType === 'push' && parsedData.owner && parsedData.repo) {
+      if (
+        parsedData.eventType === 'push' &&
+        parsedData.owner &&
+        parsedData.repo
+      ) {
         // GitHub
         const lastCommit = commits[commits.length - 1];
-        await this.githubService.createCommitComment(parsedData.owner, parsedData.repo, lastCommit.id, reviewResult.overall);
+        await this.githubService.createCommitComment(
+          parsedData.owner,
+          parsedData.repo,
+          lastCommit.id,
+          reviewResult.detail,
+        );
       } else if (parsedData.eventType === 'push' && parsedData.projectId) {
         // GitLab
         const lastCommit = commits[commits.length - 1];
-        await this.gitlabService.addCommitComment(parsedData.projectId, lastCommit.id, reviewResult.overall);
+        await this.gitlabService.addCommitComment(
+          parsedData.projectId,
+          lastCommit.id,
+          reviewResult.detail,
+        );
       }
 
-      // 发送通知
-      await this.notificationService.sendNotification({
-        content: reviewResult.overall,
-        title: `代码审查 - ${projectName}`,
-        msgType: 'markdown',
-      });
-
+      if (reviewResult.summary) {
+        // 发送通知
+        await this.notificationService.sendNotification({
+          content: reviewResult.summary,
+          title: `PingReviewer - ${projectName}`,
+          msgType: 'text',
+        });
+      }
     } catch (error) {
       console.error('Push review failed:', error.message);
     }
@@ -281,13 +376,11 @@ export class ReviewService {
 
   private filterChanges(changes: any[]): any[] {
     return changes
-      .filter(change => !change.deleted_file)
-      .filter(change =>
-        this.supportedExtensions.some(ext =>
-          change.new_path?.endsWith(ext)
-        )
+      .filter((change) => !change.deleted_file)
+      .filter((change) =>
+        this.supportedExtensions.some((ext) => change.new_path?.endsWith(ext)),
       )
-      .map(change => ({
+      .map((change) => ({
         diff: change.diff || '',
         new_path: change.new_path,
         additions: this.countAdditions(change.diff || ''),
@@ -297,12 +390,10 @@ export class ReviewService {
 
   private filterGitHubChanges(files: any[]): any[] {
     return files
-      .filter(file =>
-        this.supportedExtensions.some(ext =>
-          file.filename?.endsWith(ext)
-        )
+      .filter((file) =>
+        this.supportedExtensions.some((ext) => file.filename?.endsWith(ext)),
       )
-      .map(file => ({
+      .map((file) => ({
         diff: file.patch || '',
         new_path: file.filename,
         additions: file.additions || 0,
@@ -318,11 +409,15 @@ export class ReviewService {
     return (diff.match(/^-(?!--)/gm) || []).length;
   }
 
-  private async generateCodeReview(changes: any[], commitMessages: string): Promise<ReviewResult> {
+  private async generateCodeReview(
+    changes: any[],
+    commitMessages: string,
+  ): Promise<ReviewResult> {
     const llmClient = this.llmFactory.getClient();
+
     // 合并所有变更的diff
     const combinedDiff = changes
-      .map(change => `文件: ${change.new_path}\n${change.diff}`)
+      .map((change) => `文件: ${change.new_path}\n${change.diff}`)
       .join('\n\n');
 
     return await llmClient.generateReview(combinedDiff, commitMessages);
@@ -330,14 +425,36 @@ export class ReviewService {
 
   private calculateScore(reviewResult: string): number {
     // 简单的评分逻辑，可以根据审查结果的内容来计算
-    const positiveKeywords = ['good', 'excellent', 'well', 'nice', 'great', 'perfect'];
-    const negativeKeywords = ['error', 'bug', 'issue', 'problem', 'wrong', 'bad'];
+    const positiveKeywords = [
+      'good',
+      'excellent',
+      'well',
+      'nice',
+      'great',
+      'perfect',
+    ];
+    const negativeKeywords = [
+      'error',
+      'bug',
+      'issue',
+      'problem',
+      'wrong',
+      'bad',
+    ];
 
-    const positiveCount = positiveKeywords.reduce((count, keyword) =>
-      count + (reviewResult.toLowerCase().match(new RegExp(keyword, 'g')) || []).length, 0
+    const positiveCount = positiveKeywords.reduce(
+      (count, keyword) =>
+        count +
+        (reviewResult.toLowerCase().match(new RegExp(keyword, 'g')) || [])
+          .length,
+      0,
     );
-    const negativeCount = negativeKeywords.reduce((count, keyword) =>
-      count + (reviewResult.toLowerCase().match(new RegExp(keyword, 'g')) || []).length, 0
+    const negativeCount = negativeKeywords.reduce(
+      (count, keyword) =>
+        count +
+        (reviewResult.toLowerCase().match(new RegExp(keyword, 'g')) || [])
+          .length,
+      0,
     );
 
     // 基础分数 70，根据关键词调整
@@ -365,18 +482,20 @@ export class ReviewService {
     // 使用文件变更内容的哈希，而不是文件本身的SHA
     // 这样可以检测到相同的文件变更，避免重复生成Review
     const changeContent = changes
-      .map(change => ({
+      .map((change) => ({
         path: change.filename || change.new_path,
         additions: change.additions || 0,
         deletions: change.deletions || 0,
         patch: change.patch || change.diff || '',
       }))
       .sort((a, b) => a.path.localeCompare(b.path)) // 按路径排序确保一致性
-      .map(change => `${change.path}:${change.additions}:${change.deletions}:${change.patch}`)
+      .map(
+        (change) =>
+          `${change.path}:${change.additions}:${change.deletions}:${change.patch}`,
+      )
       .join('|');
 
     // 生成SHA256哈希
     return crypto.createHash('sha256').update(changeContent).digest('hex');
   }
 }
-

@@ -1,3 +1,9 @@
+export interface ReviewResult {
+  summary: string;
+  detail: string;
+  inlineComments: InlineComment[];
+}
+
 export interface LLMClient {
   generateReview(diff: string, commitMessages: string): Promise<ReviewResult>;
   generateReport(commits: any[]): Promise<string>;
@@ -15,10 +21,5 @@ export interface InlineComment {
   file: string;
   line: number;
   comment: string;
-}
-
-export interface ReviewResult {
-  overall: string;
-  inlineComments: InlineComment[];
 }
 

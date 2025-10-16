@@ -3,7 +3,7 @@ import { Document } from 'mongoose';
 
 export type MergeRequestReviewDocument = MergeRequestReview & Document;
 
-@Schema({ timestamps: true })
+@Schema({ timestamps: true, collection: 'merge_request_reviews' })
 export class MergeRequestReview {
   @Prop({ required: true })
   projectName: string;
@@ -51,10 +51,10 @@ export class MergeRequestReview {
   lastChangeHash: string;
 }
 
-export const MergeRequestReviewSchema = SchemaFactory.createForClass(MergeRequestReview);
+export const MergeRequestReviewSchema =
+  SchemaFactory.createForClass(MergeRequestReview);
 
 // 创建索引
 MergeRequestReviewSchema.index({ updatedAt: -1 });
 MergeRequestReviewSchema.index({ projectName: 1 });
 MergeRequestReviewSchema.index({ author: 1 });
-

@@ -36,7 +36,58 @@ export class OpenAIClient extends BaseLLMClient {
             messages: [
               {
                 role: 'system',
-                content: 'You are a professional code review expert. Please review the code changes and provide constructive suggestions.',
+                content: `You are a professional code review expert. Please perform a detailed review of the given code and provide constructive suggestions.
+                  Return the result strictly in JSON format as shown below:
+                  {
+                    "summary": "Summary",
+                    "detail": "Detailed suggestions",
+                    "inlineComments": [
+                      {
+                        "file": "Actual file path",
+                        "line": Actual modified line number,
+                        "comment": "Specific comment for this line"
+                      }
+                    ]
+                  }
+                  Requirements:
+
+                  summary should be concise and suitable for a notification message.
+
+                  Use \n for proper line breaks.
+
+                  Limit to no more than 5 key points.
+
+                  detail should include a comprehensive review, formatted in Markdown for readability.
+
+                  The review status in the summary should be one of the following:
+
+                  ✅ Mergeable (Minor)
+
+                  ⚠️ Mergeable (With Improvements)
+
+                  ❌ Not Mergeable (Severe Issues)
+
+                  inlineComments must always be an array.
+
+                  If there are no inline comments, return an empty array [].
+
+                  Each item in inlineComments must include exactly these three fields: file, line, and comment.
+
+                  Do not include extra fields, example values, or explanatory text.
+
+                  Example Output:
+                  {
+                    "summary": "Status: ❌ Not Mergeable \n 1. Two naming issues found, please revise variable names. \n 2. One critical bug detected.",
+                    "detail": "1. The code structure is generally clear and logical.\n2. Two variables use inconsistent naming conventions — consider switching to camelCase.\n3. One critical logic flaw may cause runtime errors.",
+                    "inlineComments": [
+                      {
+                        "file": "/src/index.ts",
+                        "line": 10,
+                        "comment": "Variable names should follow camelCase convention."
+                      }
+                    ]
+                  }
+                `,
               },
               {
                 role: 'user',
@@ -48,7 +99,7 @@ export class OpenAIClient extends BaseLLMClient {
           },
           {
             headers: {
-              'Authorization': `Bearer ${this.getApiKey()}`,
+              Authorization: `Bearer ${this.getApiKey()}`,
               'Content-Type': 'application/json',
             },
           },
@@ -73,7 +124,9 @@ export class OpenAIClient extends BaseLLMClient {
             messages: [
               {
                 role: 'system',
-                content: 'You are a project report generator. Please generate a concise daily report based on commit records.',
+                content:
+                  `
+`,
               },
               {
                 role: 'user',
@@ -85,7 +138,7 @@ export class OpenAIClient extends BaseLLMClient {
           },
           {
             headers: {
-              'Authorization': `Bearer ${this.getApiKey()}`,
+              Authorization: `Bearer ${this.getApiKey()}`,
               'Content-Type': 'application/json',
             },
           },
@@ -100,44 +153,24 @@ export class OpenAIClient extends BaseLLMClient {
 
   private buildReviewPrompt(diff: string, commitMessages: string): string {
     return `
-You are an experienced code reviewer. Please conduct a professional review of the following code changes.
+Please review the following code changes:
 
-Commit messages:
-${commitMessages}
+Commit messages: ${commitMessages}
 
-Code changes (standard Git diff format):
-\`\`\`diff
+Code changes:
+\`\`\`
 ${diff}
 \`\`\`
 
-Please review the changes from the following aspects:
-1. Code quality and conventions
+Please review from the following perspectives:
+1. Code quality and standards
 2. Potential security issues
-3. Performance optimization
+3. Performance optimization suggestions
 4. Maintainability and readability
-5. Best practices
+5. Best practices recommendations
 
-Output requirements:
-- Return only a JSON object, without any additional explanation or Markdown.
-- JSON format:
-{
-  "overall": "Write a comprehensive code review report, including multiple improvement suggestions, analysis, Markdown-formatted lists, and code examples if needed.",
-  "inlineComments": [
-    {
-      "file": "Provide the actual file path",
-      "line": Provide the actual line number,
-      "comment": "Provide a specific comment for that line"
-    }
-  ]
-}
-- The overall field should contain a detailed review report, which may include:
-  - Multiple specific improvement suggestions
-  - Markdown formatting (lists, headings, emphasis)
-  - Code examples (enclosed in \`\`\` blocks)
-- inlineComments must be an array; if there are no line-level comments, return an empty array [].
-- Each inlineComments item must include file, line, and comment.
-- Do not output any other fields, example values, or extra text.
-  `.trim();
+Please provide specific improvement suggestions and code examples.
+    `.trim();
   }
 
   private buildReportPrompt(commits: any[]): string {
@@ -158,4 +191,3 @@ Please use concise and clear language suitable for team sharing.
     `.trim();
   }
 }
-

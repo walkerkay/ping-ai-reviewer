@@ -14,9 +14,9 @@ export interface ReviewQuery {
 @Injectable()
 export class DatabaseService {
   constructor(
-    @InjectModel(MergeRequestReview.name)
+    @InjectModel('MergeRequestReview')
     private mergeRequestReviewModel: Model<MergeRequestReviewDocument>,
-    @InjectModel(PushReview.name)
+    @InjectModel('PushReview')
     private pushReviewModel: Model<PushReviewDocument>,
   ) {}
 
