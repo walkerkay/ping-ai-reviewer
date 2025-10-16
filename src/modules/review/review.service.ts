@@ -27,17 +27,11 @@ export class ReviewService {
 
   async handleMergeRequest(parsedData: any): Promise<void> {
     try {
-      const {
-        projectId,
-        mergeRequestIid,
-        projectName,
-        author,
-        sourceBranch,
-        targetBranch,
-        url,
-        webhookData,
-      } = parsedData;
+      const { projectId, mergeRequestIid, projectName, author, sourceBranch, targetBranch, url, webhookData, action } = parsedData;
 
+      if (action === "close") {
+        return;
+      }
       // 获取变更文件
       const changes = await this.gitlabService.getMergeRequestChanges(
         projectId,
@@ -90,6 +84,24 @@ export class ReviewService {
         deletions,
         lastCommitId,
       });
+
+      // 行级评论
+      const {
+        diff_refs: diffRefs
+      } = await this.gitlabService.getMergeRequest(projectId, mergeRequestIid) as any;
+      for (const c of reviewResult.inlineComments) {
+        try {
+          await this.gitlabService.addMergeRequestDiscussions(projectId, mergeRequestIid, c.comment, {
+            line: c.line,
+            filePath: c.file,
+            baseSha: diffRefs?.base_sha,
+            headSha: diffRefs?.head_sha,
+            startSha: diffRefs?.start_sha,
+          });
+        } catch (e) {
+          console.warn(`Failed to comment on ${c.file}:${c.line} -> ${e.message}`);
+        }
+      }
 
       // 添加评论到Merge Request
       await this.gitlabService.addMergeRequestNote(
@@ -203,6 +215,21 @@ export class ReviewService {
         lastCommitId: '',
         lastChangeHash: filesHash,
       });
+
+      // 行级评论
+      const headCommitId = commits[commits.length - 1]?.sha || '';
+      for (const c of reviewResult.inlineComments) {
+        try {
+          await this.githubService.createPullRequestLineComment(owner, repo, pullNumber, {
+            file: c.file,
+            line: c.line,
+            comment: c.comment,
+            commitId: headCommitId,
+          });
+        } catch (e) {
+          console.warn(`Failed to comment on ${c.file}:${c.line} -> ${e.message}`);
+        }
+      }
 
       // 添加评论到Pull Request
       await this.githubService.createPullRequestComment(

@@ -36,8 +36,58 @@ export class OpenAIClient extends BaseLLMClient {
             messages: [
               {
                 role: 'system',
-                content:
-                  'You are a professional code review expert. Please review the code changes and provide constructive suggestions.',
+                content: `You are a professional code review expert. Please perform a detailed review of the given code and provide constructive suggestions.
+                  Return the result strictly in JSON format as shown below:
+                  {
+                    "summary": "Summary",
+                    "detail": "Detailed suggestions",
+                    "inlineComments": [
+                      {
+                        "file": "Actual file path",
+                        "line": Actual modified line number,
+                        "comment": "Specific comment for this line"
+                      }
+                    ]
+                  }
+                  Requirements:
+
+                  summary should be concise and suitable for a notification message.
+
+                  Use \n for proper line breaks.
+
+                  Limit to no more than 5 key points.
+
+                  detail should include a comprehensive review, formatted in Markdown for readability.
+
+                  The review status in the summary should be one of the following:
+
+                  ✅ Mergeable (Minor)
+
+                  ⚠️ Mergeable (With Improvements)
+
+                  ❌ Not Mergeable (Severe Issues)
+
+                  inlineComments must always be an array.
+
+                  If there are no inline comments, return an empty array [].
+
+                  Each item in inlineComments must include exactly these three fields: file, line, and comment.
+
+                  Do not include extra fields, example values, or explanatory text.
+
+                  Example Output:
+                  {
+                    "summary": "Status: ❌ Not Mergeable \n 1. Two naming issues found, please revise variable names. \n 2. One critical bug detected.",
+                    "detail": "1. The code structure is generally clear and logical.\n2. Two variables use inconsistent naming conventions — consider switching to camelCase.\n3. One critical logic flaw may cause runtime errors.",
+                    "inlineComments": [
+                      {
+                        "file": "/src/index.ts",
+                        "line": 10,
+                        "comment": "Variable names should follow camelCase convention."
+                      }
+                    ]
+                  }
+                `,
               },
               {
                 role: 'user',
@@ -56,10 +106,7 @@ export class OpenAIClient extends BaseLLMClient {
         ),
       );
 
-      return {
-        summary: '',
-        detail: response.data.choices[0].message.content,
-      };
+      return this.parseReviewResult(response.data.choices[0].message.content);
     } catch (error) {
       throw new Error(`OpenAI API error: ${error.message}`);
     }

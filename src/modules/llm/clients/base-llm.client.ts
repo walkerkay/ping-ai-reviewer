@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
+  InlineComment,
   LLMClient,
   LLMConfig,
   ReviewResult,
@@ -66,4 +67,44 @@ export abstract class BaseLLMClient implements LLMClient {
       2000
     );
   }
+
+  /**
+ * 解析 AI 生成的代码审查 JSON
+ * @param aiOutput AI 输出的字符串
+ * @returns ReviewResult 对象，包含整体报告和行级评论
+ */
+  protected parseReviewResult(aiOutput: string): ReviewResult {
+    try {
+      // 去掉多余空格和可能的 Markdown 代码块
+      const cleaned = aiOutput
+        .trim()
+        .replace(/^```json\s*/i, '')
+        .replace(/```$/, '');
+
+      const parsed = JSON.parse(cleaned);
+
+      // 提取 summary
+      const summary = typeof parsed.summary === 'string' ? parsed.summary : '';
+      // 提取 detail
+      const detail = typeof parsed.detail === 'string' ? parsed.detail : '';
+
+      // 提取 inlineComments 并过滤非法条目
+      const inlineComments: InlineComment[] = Array.isArray(parsed.inlineComments)
+        ? parsed.inlineComments
+          .filter(c => c && c.file && typeof c.line === 'number' && c.comment)
+          .map(c => ({
+            file: c.file,
+            line: c.line,
+            comment: c.comment,
+          }))
+        : [];
+
+      return { summary, detail: detail, inlineComments };
+    } catch (error) {
+      console.error('parse review result error:', error.message);
+      // 返回默认空结构，避免程序中断
+      return { summary: '', detail: '', inlineComments: [] };
+    }
+  }
 }
+

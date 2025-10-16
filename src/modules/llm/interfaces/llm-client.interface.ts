@@ -1,6 +1,7 @@
 export interface ReviewResult {
   summary: string;
   detail: string;
+  inlineComments: InlineComment[];
 }
 
 export interface LLMClient {
@@ -14,5 +15,11 @@ export interface LLMConfig {
   model?: string;
   temperature?: number;
   maxTokens?: number;
+}
+
+export interface InlineComment {
+  file: string;
+  line: number;
+  comment: string;
 }
 

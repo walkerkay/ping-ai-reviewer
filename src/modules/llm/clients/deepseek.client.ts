@@ -44,19 +44,34 @@ export class DeepSeekClient extends BaseLLMClient {
                 你是一个专业的代码审查专家，请对代码进行详细审查并提供建设性建议，返回JSON格式数据, 格式如下：
                   {
                     "summary": "总结",
-                    "detail": "详细建议"
+                    "detail": "详细建议",
+                    "inlineComments": [
+                      {
+                        "file": "请填写实际文件路径",
+                        "line": 请填写实际修改行号,
+                        "comment": "请填写针对该行的具体评论"
+                      }
+                    ]
                   }
                   要求：
                   1. summary 尽量简洁明了，适合发送通知，要用 \n 实现正确的换行，不要超过5点建议 
                   2. detail 是详细的Review 意见，可用 markdown 格式
                   3. 状态可为：✅ 可合并（Minor）、⚠️ 可合并（存在优化）、❌ 不可合并（有严重问题）
+                  4. inlineComments 必须是数组；如果没有行级评论，请返回空数组 []。
+                  5. 每条 inlineComments 必须包含 file、line、comment,不要输出其他字段、示例值或多余文字。
 
                   示例输出：
                   {
                     "summary": "状态：❌ 不可合并 \n 1.存在 2 处命名不规范问题，建议修改变量名。 \n 2.存在 1 处严重缺陷",
-                    "detail": "1. 代码结构清晰，逻辑正确。\n2. 存在 2 处命名不规范问题，建议修改变量名。\n3. 无潜在安全或性能问题。"
+                    "detail": "1. 代码结构清晰，逻辑正确。\n2. 存在 2 处命名不规范问题，建议修改变量名。\n3. 无潜在安全或性能问题。",
+                    "inlineComments": [
+                      {
+                        "file": "/src/index.ts",
+                        "line": 10,
+                        "comment": "变量名应使用驼峰命名法"
+                      }
+                    ]
                   }
-
                 `,
               },
               {
@@ -75,14 +90,7 @@ export class DeepSeekClient extends BaseLLMClient {
           },
         ),
       );
-      try {
-        const reviewResult = JSON.parse(
-          response.data.choices[0].message.content,
-        ) as ReviewResult;
-        return reviewResult;
-      } catch (error) {
-        throw new Error(`parse review result error: ${error.message}`);
-      }
+      return this.parseReviewResult(response.data.choices[0].message.content);
     } catch (error) {
       throw new Error(`DeepSeek API error: ${error.message}`);
     }
@@ -126,6 +134,7 @@ export class DeepSeekClient extends BaseLLMClient {
     }
   }
 
+
   private buildReviewPrompt(diff: string, commitMessages: string): string {
     return `
 请对以下代码变更进行审查：
@@ -147,6 +156,7 @@ ${diff}
 请提供具体的改进建议和代码示例。
     `.trim();
   }
+
 
   private buildReportPrompt(commits: any[]): string {
     return `

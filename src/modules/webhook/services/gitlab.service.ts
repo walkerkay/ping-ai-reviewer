@@ -19,7 +19,7 @@ export class GitLabService {
 
   async getMergeRequestChanges(projectId: string, mergeRequestIid: string): Promise<any[]> {
     const url = `${this.gitlabUrl}/api/v4/projects/${projectId}/merge_requests/${mergeRequestIid}/changes?access_raw_diffs=true`;
-    
+
     try {
       const response = await firstValueFrom(
         this.httpService.get(url, {
@@ -38,7 +38,7 @@ export class GitLabService {
 
   async getMergeRequestCommits(projectId: string, mergeRequestIid: string): Promise<any[]> {
     const url = `${this.gitlabUrl}/api/v4/projects/${projectId}/merge_requests/${mergeRequestIid}/commits`;
-    
+
     try {
       const response = await firstValueFrom(
         this.httpService.get(url, {
@@ -55,9 +55,28 @@ export class GitLabService {
     }
   }
 
+  async getMergeRequest(projectId: string, mergeRequestIid: string): Promise<any[]> {
+    const url = `${this.gitlabUrl}/api/v4/projects/${projectId}/merge_requests/${mergeRequestIid}`;
+
+    try {
+      const response = await firstValueFrom(
+        this.httpService.get(url, {
+          headers: {
+            'Private-Token': this.gitlabToken,
+          },
+        }),
+      );
+
+      return response.data || [];
+    } catch (error) {
+      console.error('Failed to get merge request detail:', error.message);
+      return [];
+    }
+  }
+
   async addMergeRequestNote(projectId: string, mergeRequestIid: string, body: string): Promise<boolean> {
     const url = `${this.gitlabUrl}/api/v4/projects/${projectId}/merge_requests/${mergeRequestIid}/notes`;
-    
+
     try {
       const response = await firstValueFrom(
         this.httpService.post(
@@ -79,9 +98,49 @@ export class GitLabService {
     }
   }
 
+  async addMergeRequestDiscussions(projectId: string, mergeRequestIid: string, body: string, position: {
+    baseSha: string;
+    headSha: string;
+    startSha: string;
+    filePath: string;
+    line: number;
+  }): Promise<boolean> {
+    const url = `${this.gitlabUrl}/api/v4/projects/${projectId}/merge_requests/${mergeRequestIid}/discussions`;
+
+    try {
+      const response = await firstValueFrom(
+        this.httpService.post(
+          url,
+          {
+            body, position: {
+              position_type: "text",
+              base_sha: position.baseSha,
+              head_sha: position.headSha,
+              start_sha: position.startSha,
+              old_path: position.filePath,
+              new_path: position.filePath,
+              new_line: position.line,
+            }
+          },
+          {
+            headers: {
+              'Private-Token': this.gitlabToken,
+              'Content-Type': 'application/json',
+            },
+          },
+        ),
+      );
+
+      return response.status === 201;
+    } catch (error) {
+      console.error('Failed to add merge request discussions:', error.message);
+      return false;
+    }
+  }
+
   async addCommitComment(projectId: string, commitId: string, note: string): Promise<boolean> {
     const url = `${this.gitlabUrl}/api/v4/projects/${projectId}/repository/commits/${commitId}/comments`;
-    
+
     try {
       const response = await firstValueFrom(
         this.httpService.post(
@@ -105,7 +164,7 @@ export class GitLabService {
 
   async getRepositoryCompare(projectId: string, before: string, after: string): Promise<any[]> {
     const url = `${this.gitlabUrl}/api/v4/projects/${projectId}/repository/compare?from=${before}&to=${after}`;
-    
+
     try {
       const response = await firstValueFrom(
         this.httpService.get(url, {
@@ -124,7 +183,7 @@ export class GitLabService {
 
   async isTargetBranchProtected(projectId: string, targetBranch: string): Promise<boolean> {
     const url = `${this.gitlabUrl}/api/v4/projects/${projectId}/protected_branches`;
-    
+
     try {
       const response = await firstValueFrom(
         this.httpService.get(url, {
@@ -135,7 +194,7 @@ export class GitLabService {
       );
 
       const protectedBranches = response.data || [];
-      return protectedBranches.some((branch: any) => 
+      return protectedBranches.some((branch: any) =>
         this.matchesBranchPattern(targetBranch, branch.name)
       );
     } catch (error) {
@@ -152,20 +211,20 @@ export class GitLabService {
 
   parseWebhookData(webhookData: GitLabWebhookDto): any {
     const objectKind = webhookData.object_kind;
-    
+
     if (objectKind === 'merge_request') {
       return this.parseMergeRequestEvent(webhookData);
     } else if (objectKind === 'push') {
       return this.parsePushEvent(webhookData);
     }
-    
+
     return null;
   }
 
   private parseMergeRequestEvent(webhookData: GitLabWebhookDto): any {
     const objectAttributes = webhookData.object_attributes || {};
     const project = webhookData.project || {};
-    
+
     return {
       eventType: 'merge_request',
       mergeRequestIid: objectAttributes.iid,
@@ -186,7 +245,7 @@ export class GitLabService {
     const ref = webhookData.ref || '';
     const branchName = ref.replace('refs/heads/', '');
     const commits = webhookData.commits || [];
-    
+
     return {
       eventType: 'push',
       projectId: project.id,
