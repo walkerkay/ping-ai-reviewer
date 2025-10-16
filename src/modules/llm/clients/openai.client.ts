@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { BaseLLMClient } from './base-llm.client';
-import { LLMConfig } from '../interfaces/llm-client.interface';
+import { LLMConfig, ReviewResult } from '../interfaces/llm-client.interface';
 
 @Injectable()
 export class OpenAIClient extends BaseLLMClient {
@@ -24,9 +24,9 @@ export class OpenAIClient extends BaseLLMClient {
     };
   }
 
-  async generateReview(diff: string, commitMessages: string): Promise<string> {
+  async generateReview(diff: string, commitMessages: string): Promise<ReviewResult> {
     const prompt = this.buildReviewPrompt(diff, commitMessages);
-    
+
     try {
       const response = await firstValueFrom(
         this.httpService.post(
@@ -36,7 +36,8 @@ export class OpenAIClient extends BaseLLMClient {
             messages: [
               {
                 role: 'system',
-                content: 'You are a professional code review expert. Please review the code changes and provide constructive suggestions.',
+                content:
+                  'You are a professional code review expert. Please review the code changes and provide constructive suggestions.',
               },
               {
                 role: 'user',
@@ -48,14 +49,17 @@ export class OpenAIClient extends BaseLLMClient {
           },
           {
             headers: {
-              'Authorization': `Bearer ${this.getApiKey()}`,
+              Authorization: `Bearer ${this.getApiKey()}`,
               'Content-Type': 'application/json',
             },
           },
         ),
       );
 
-      return response.data.choices[0].message.content;
+      return {
+        summary: '',
+        detail: response.data.choices[0].message.content,
+      };
     } catch (error) {
       throw new Error(`OpenAI API error: ${error.message}`);
     }
@@ -63,7 +67,7 @@ export class OpenAIClient extends BaseLLMClient {
 
   async generateReport(commits: any[]): Promise<string> {
     const prompt = this.buildReportPrompt(commits);
-    
+
     try {
       const response = await firstValueFrom(
         this.httpService.post(
@@ -73,7 +77,8 @@ export class OpenAIClient extends BaseLLMClient {
             messages: [
               {
                 role: 'system',
-                content: 'You are a project report generator. Please generate a concise daily report based on commit records.',
+                content:
+                  'You are a project report generator. Please generate a concise daily report based on commit records.',
               },
               {
                 role: 'user',
@@ -85,7 +90,7 @@ export class OpenAIClient extends BaseLLMClient {
           },
           {
             headers: {
-              'Authorization': `Bearer ${this.getApiKey()}`,
+              Authorization: `Bearer ${this.getApiKey()}`,
               'Content-Type': 'application/json',
             },
           },
@@ -138,4 +143,3 @@ Please use concise and clear language suitable for team sharing.
     `.trim();
   }
 }
-

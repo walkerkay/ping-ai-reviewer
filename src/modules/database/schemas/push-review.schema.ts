@@ -3,7 +3,7 @@ import { Document } from 'mongoose';
 
 export type PushReviewDocument = PushReview & Document;
 
-@Schema({ timestamps: true })
+@Schema({ timestamps: true, collection: 'push_reviews' })
 export class PushReview {
   @Prop({ required: true })
   projectName: string;

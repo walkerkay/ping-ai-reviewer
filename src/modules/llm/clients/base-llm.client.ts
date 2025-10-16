@@ -1,6 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { LLMClient, LLMConfig } from '../interfaces/llm-client.interface';
+import {
+  LLMClient,
+  LLMConfig,
+  ReviewResult,
+} from '../interfaces/llm-client.interface';
 
 @Injectable()
 export abstract class BaseLLMClient implements LLMClient {
@@ -15,28 +19,51 @@ export abstract class BaseLLMClient implements LLMClient {
 
   protected abstract getConfig(): LLMConfig;
 
-  abstract generateReview(diff: string, commitMessages: string): Promise<string>;
+  abstract generateReview(
+    diff: string,
+    commitMessages: string,
+  ): Promise<ReviewResult>;
 
   abstract generateReport(commits: any[]): Promise<string>;
 
   protected getApiKey(): string {
-    return this.configService.get<string>(`${this.provider.toUpperCase()}_API_KEY`);
+    return this.configService.get<string>(
+      `${this.provider.toUpperCase()}_API_KEY`,
+    );
   }
 
   protected getBaseUrl(): string {
-    return this.configService.get<string>(`${this.provider.toUpperCase()}_BASE_URL`) || this.config.baseUrl;
+    return (
+      this.configService.get<string>(
+        `${this.provider.toUpperCase()}_BASE_URL`,
+      ) || this.config.baseUrl
+    );
   }
 
   protected getModel(): string {
-    return this.configService.get<string>(`${this.provider.toUpperCase()}_MODEL`) || this.config.model;
+    return (
+      this.configService.get<string>(`${this.provider.toUpperCase()}_MODEL`) ||
+      this.config.model
+    );
   }
 
   protected getTemperature(): number {
-    return this.configService.get<number>(`${this.provider.toUpperCase()}_TEMPERATURE`) || this.config.temperature || 0.7;
+    return (
+      this.configService.get<number>(
+        `${this.provider.toUpperCase()}_TEMPERATURE`,
+      ) ||
+      this.config.temperature ||
+      0.7
+    );
   }
 
   protected getMaxTokens(): number {
-    return this.configService.get<number>(`${this.provider.toUpperCase()}_MAX_TOKENS`) || this.config.maxTokens || 2000;
+    return (
+      this.configService.get<number>(
+        `${this.provider.toUpperCase()}_MAX_TOKENS`,
+      ) ||
+      this.config.maxTokens ||
+      2000
+    );
   }
 }
-

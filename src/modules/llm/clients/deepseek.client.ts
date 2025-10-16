@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { BaseLLMClient } from './base-llm.client';
-import { LLMConfig } from '../interfaces/llm-client.interface';
+import { LLMConfig, ReviewResult } from '../interfaces/llm-client.interface';
 
 @Injectable()
 export class DeepSeekClient extends BaseLLMClient {
@@ -24,19 +24,40 @@ export class DeepSeekClient extends BaseLLMClient {
     };
   }
 
-  async generateReview(diff: string, commitMessages: string): Promise<string> {
+  async generateReview(
+    diff: string,
+    commitMessages: string,
+  ): Promise<ReviewResult> {
     const prompt = this.buildReviewPrompt(diff, commitMessages);
-    
+
     try {
       const response = await firstValueFrom(
         this.httpService.post(
           `${this.getBaseUrl()}/chat/completions`,
           {
             model: this.getModel(),
+            response_format: { type: 'json_object' },
             messages: [
               {
                 role: 'system',
-                content: '你是一个专业的代码审查专家，请对代码进行详细审查并提供建设性建议。',
+                content: `
+                你是一个专业的代码审查专家，请对代码进行详细审查并提供建设性建议，返回JSON格式数据, 格式如下：
+                  {
+                    "summary": "总结",
+                    "detail": "详细建议"
+                  }
+                  要求：
+                  1. summary 尽量简洁明了，适合发送通知，要用 \n 实现正确的换行，不要超过5点建议 
+                  2. detail 是详细的Review 意见，可用 markdown 格式
+                  3. 状态可为：✅ 可合并（Minor）、⚠️ 可合并（存在优化）、❌ 不可合并（有严重问题）
+
+                  示例输出：
+                  {
+                    "summary": "状态：❌ 不可合并 \n 1.存在 2 处命名不规范问题，建议修改变量名。 \n 2.存在 1 处严重缺陷",
+                    "detail": "1. 代码结构清晰，逻辑正确。\n2. 存在 2 处命名不规范问题，建议修改变量名。\n3. 无潜在安全或性能问题。"
+                  }
+
+                `,
               },
               {
                 role: 'user',
@@ -48,14 +69,20 @@ export class DeepSeekClient extends BaseLLMClient {
           },
           {
             headers: {
-              'Authorization': `Bearer ${this.getApiKey()}`,
+              Authorization: `Bearer ${this.getApiKey()}`,
               'Content-Type': 'application/json',
             },
           },
         ),
       );
-
-      return response.data.choices[0].message.content;
+      try {
+        const reviewResult = JSON.parse(
+          response.data.choices[0].message.content,
+        ) as ReviewResult;
+        return reviewResult;
+      } catch (error) {
+        throw new Error(`parse review result error: ${error.message}`);
+      }
     } catch (error) {
       throw new Error(`DeepSeek API error: ${error.message}`);
     }
@@ -63,7 +90,7 @@ export class DeepSeekClient extends BaseLLMClient {
 
   async generateReport(commits: any[]): Promise<string> {
     const prompt = this.buildReportPrompt(commits);
-    
+
     try {
       const response = await firstValueFrom(
         this.httpService.post(
@@ -73,7 +100,8 @@ export class DeepSeekClient extends BaseLLMClient {
             messages: [
               {
                 role: 'system',
-                content: '你是一个项目日报生成专家，请根据提交记录生成简洁明了的日报。',
+                content:
+                  '你是一个项目日报生成专家，请根据提交记录生成简洁明了的日报。',
               },
               {
                 role: 'user',
@@ -85,7 +113,7 @@ export class DeepSeekClient extends BaseLLMClient {
           },
           {
             headers: {
-              'Authorization': `Bearer ${this.getApiKey()}`,
+              Authorization: `Bearer ${this.getApiKey()}`,
               'Content-Type': 'application/json',
             },
           },
@@ -138,4 +166,3 @@ ${JSON.stringify(commits, null, 2)}
     `.trim();
   }
 }
-
