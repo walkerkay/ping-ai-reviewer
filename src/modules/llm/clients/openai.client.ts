@@ -125,8 +125,7 @@ export class OpenAIClient extends BaseLLMClient {
               {
                 role: 'system',
                 content:
-                  `
-`,
+                  'You are a project report generator. Please generate a concise daily report based on commit records.',
               },
               {
                 role: 'user',

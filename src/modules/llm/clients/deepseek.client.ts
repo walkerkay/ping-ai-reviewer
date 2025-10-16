@@ -45,13 +45,13 @@ export class DeepSeekClient extends BaseLLMClient {
                   {
                     "summary": "总结",
                     "detail": "详细建议",
-                      "inlineComments": [
-                        {
-                          "file": "请填写实际文件路径",
-                          "line": 请填写实际修改行号,
-                          "comment": "请填写针对该行的具体评论"
-                        }
-                      ]
+                    "inlineComments": [
+                      {
+                        "file": "请填写实际文件路径",
+                        "line": 请填写实际修改行号,
+                        "comment": "请填写针对该行的具体评论"
+                      }
+                    ]
                   }
                   要求：
                   1. summary 尽量简洁明了，适合发送通知，要用 \n 实现正确的换行，不要超过5点建议 
