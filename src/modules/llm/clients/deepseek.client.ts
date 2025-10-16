@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { BaseLLMClient } from './base-llm.client';
-import { LLMConfig } from '../interfaces/llm-client.interface';
+import { LLMConfig, ReviewResult } from '../interfaces/llm-client.interface';
 
 @Injectable()
 export class DeepSeekClient extends BaseLLMClient {
@@ -24,9 +24,9 @@ export class DeepSeekClient extends BaseLLMClient {
     };
   }
 
-  async generateReview(diff: string, commitMessages: string): Promise<string> {
+  async generateReview(diff: string, commitMessages: string): Promise<ReviewResult> {
     const prompt = this.buildReviewPrompt(diff, commitMessages);
-    
+
     try {
       const response = await firstValueFrom(
         this.httpService.post(
@@ -55,7 +55,7 @@ export class DeepSeekClient extends BaseLLMClient {
         ),
       );
 
-      return response.data.choices[0].message.content;
+      return this.parseReviewResult(response.data.choices[0].message.content);
     } catch (error) {
       throw new Error(`DeepSeek API error: ${error.message}`);
     }
@@ -63,7 +63,7 @@ export class DeepSeekClient extends BaseLLMClient {
 
   async generateReport(commits: any[]): Promise<string> {
     const prompt = this.buildReportPrompt(commits);
-    
+
     try {
       const response = await firstValueFrom(
         this.httpService.post(
@@ -98,27 +98,49 @@ export class DeepSeekClient extends BaseLLMClient {
     }
   }
 
+
   private buildReviewPrompt(diff: string, commitMessages: string): string {
     return `
-请对以下代码变更进行审查：
+你是一名资深代码审查专家，请对以下代码变更进行专业审查。
 
-提交信息：${commitMessages}
+提交信息：
+${commitMessages}
 
-代码变更：
-\`\`\`
+代码变更（标准 Git diff 格式）：
+\`\`\`diff
 ${diff}
 \`\`\`
 
 请从以下角度进行审查：
-1. 代码质量和规范性
+1. 代码质量与规范性
 2. 潜在的安全问题
-3. 性能优化建议
-4. 可维护性和可读性
-5. 最佳实践建议
+3. 性能优化
+4. 可维护性与可读性
+5. 最佳实践
 
-请提供具体的改进建议和代码示例。
-    `.trim();
+输出要求：
+- 仅返回一个 JSON 对象，不要输出任何额外说明或 Markdown。
+- JSON 格式如下：
+{
+  "overall": "请写一条综合性代码审查报告，可以包含多条改进建议、分析说明、Markdown 格式列表以及代码段示例。",
+  "inlineComments": [
+    {
+      "file": "请填写实际文件路径",
+      "line": 请填写实际修改行号,
+      "comment": "请填写针对该行的具体评论"
+    }
+  ]
+}
+- overall 字段应包含详细审查报告，可包含：
+  - 多条具体改进建议
+  - Markdown 格式（如列表、标题、强调）
+  - 代码段示例（用 \`\`\` 包裹）
+- inlineComments 必须是数组；如果没有行级评论，请返回空数组 []。
+- 每条 inlineComments 必须包含 file、line、comment。
+- 不要输出其他字段、示例值或多余文字。
+  `.trim();
   }
+
 
   private buildReportPrompt(commits: any[]): string {
     return `

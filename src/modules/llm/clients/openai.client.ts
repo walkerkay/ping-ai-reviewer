@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { BaseLLMClient } from './base-llm.client';
-import { LLMConfig } from '../interfaces/llm-client.interface';
+import { LLMConfig, ReviewResult } from '../interfaces/llm-client.interface';
 
 @Injectable()
 export class OpenAIClient extends BaseLLMClient {
@@ -24,9 +24,9 @@ export class OpenAIClient extends BaseLLMClient {
     };
   }
 
-  async generateReview(diff: string, commitMessages: string): Promise<string> {
+  async generateReview(diff: string, commitMessages: string): Promise<ReviewResult> {
     const prompt = this.buildReviewPrompt(diff, commitMessages);
-    
+
     try {
       const response = await firstValueFrom(
         this.httpService.post(
@@ -55,7 +55,7 @@ export class OpenAIClient extends BaseLLMClient {
         ),
       );
 
-      return response.data.choices[0].message.content;
+      return this.parseReviewResult(response.data.choices[0].message.content);
     } catch (error) {
       throw new Error(`OpenAI API error: ${error.message}`);
     }
@@ -63,7 +63,7 @@ export class OpenAIClient extends BaseLLMClient {
 
   async generateReport(commits: any[]): Promise<string> {
     const prompt = this.buildReportPrompt(commits);
-    
+
     try {
       const response = await firstValueFrom(
         this.httpService.post(
@@ -100,24 +100,44 @@ export class OpenAIClient extends BaseLLMClient {
 
   private buildReviewPrompt(diff: string, commitMessages: string): string {
     return `
-Please review the following code changes:
+You are an experienced code reviewer. Please conduct a professional review of the following code changes.
 
-Commit messages: ${commitMessages}
+Commit messages:
+${commitMessages}
 
-Code changes:
-\`\`\`
+Code changes (standard Git diff format):
+\`\`\`diff
 ${diff}
 \`\`\`
 
-Please review from the following perspectives:
-1. Code quality and standards
+Please review the changes from the following aspects:
+1. Code quality and conventions
 2. Potential security issues
-3. Performance optimization suggestions
+3. Performance optimization
 4. Maintainability and readability
-5. Best practices recommendations
+5. Best practices
 
-Please provide specific improvement suggestions and code examples.
-    `.trim();
+Output requirements:
+- Return only a JSON object, without any additional explanation or Markdown.
+- JSON format:
+{
+  "overall": "Write a comprehensive code review report, including multiple improvement suggestions, analysis, Markdown-formatted lists, and code examples if needed.",
+  "inlineComments": [
+    {
+      "file": "Provide the actual file path",
+      "line": Provide the actual line number,
+      "comment": "Provide a specific comment for that line"
+    }
+  ]
+}
+- The overall field should contain a detailed review report, which may include:
+  - Multiple specific improvement suggestions
+  - Markdown formatting (lists, headings, emphasis)
+  - Code examples (enclosed in \`\`\` blocks)
+- inlineComments must be an array; if there are no line-level comments, return an empty array [].
+- Each inlineComments item must include file, line, and comment.
+- Do not output any other fields, example values, or extra text.
+  `.trim();
   }
 
   private buildReportPrompt(commits: any[]): string {

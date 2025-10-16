@@ -1,5 +1,5 @@
 export interface LLMClient {
-  generateReview(diff: string, commitMessages: string): Promise<string>;
+  generateReview(diff: string, commitMessages: string): Promise<ReviewResult>;
   generateReport(commits: any[]): Promise<string>;
 }
 
@@ -9,5 +9,16 @@ export interface LLMConfig {
   model?: string;
   temperature?: number;
   maxTokens?: number;
+}
+
+export interface InlineComment {
+  file: string;
+  line: number;
+  comment: string;
+}
+
+export interface ReviewResult {
+  overall: string;
+  inlineComments: InlineComment[];
 }
 

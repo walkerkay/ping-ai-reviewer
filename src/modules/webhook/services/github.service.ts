@@ -19,7 +19,7 @@ export class GitHubService {
 
   async getPullRequestFiles(owner: string, repo: string, pullNumber: number): Promise<any[]> {
     const url = `${this.githubUrl}/repos/${owner}/${repo}/pulls/${pullNumber}/files`;
-    
+
     try {
       const response = await firstValueFrom(
         this.httpService.get(url, {
@@ -41,7 +41,7 @@ export class GitHubService {
 
   async getPullRequestCommits(owner: string, repo: string, pullNumber: number): Promise<any[]> {
     const url = `${this.githubUrl}/repos/${owner}/${repo}/pulls/${pullNumber}/commits`;
-    
+
     try {
       const response = await firstValueFrom(
         this.httpService.get(url, {
@@ -63,7 +63,7 @@ export class GitHubService {
 
   async createPullRequestComment(owner: string, repo: string, pullNumber: number, body: string): Promise<boolean> {
     const url = `${this.githubUrl}/repos/${owner}/${repo}/issues/${pullNumber}/comments`;
-    
+
     try {
       const response = await firstValueFrom(
         this.httpService.post(
@@ -86,9 +86,39 @@ export class GitHubService {
     }
   }
 
+  async createPullRequestLineComment(owner: string, repo: string, pullNumber: number, body: {
+    file: string;
+    line: number;
+    commitId: string;
+    comment: string;
+  }): Promise<boolean> {
+    const url = `${this.githubUrl}/repos/${owner}/${repo}/pulls/${pullNumber}/comments`;
+
+    try {
+      const response = await firstValueFrom(
+        this.httpService.post(
+          url,
+          { body: body.comment, commit_id: body.commitId, path: body.file, line: body.line },
+          {
+            headers: {
+              'Authorization': `Bearer ${this.githubToken}`,
+              'Accept': 'application/vnd.github.v3+json',
+              'Content-Type': 'application/json',
+            },
+          },
+        ),
+      );
+
+      return response.status === 201;
+    } catch (error) {
+      console.error('Failed to create pull request line comment:', error.message);
+      return false;
+    }
+  }
+
   async createCommitComment(owner: string, repo: string, commitSha: string, body: string): Promise<boolean> {
     const url = `${this.githubUrl}/repos/${owner}/${repo}/commits/${commitSha}/comments`;
-    
+
     try {
       const response = await firstValueFrom(
         this.httpService.post(
@@ -113,7 +143,7 @@ export class GitHubService {
 
   async getCommitFiles(owner: string, repo: string, commitSha: string): Promise<any[]> {
     const url = `${this.githubUrl}/repos/${owner}/${repo}/commits/${commitSha}`;
-    
+
     try {
       const response = await firstValueFrom(
         this.httpService.get(url, {
@@ -139,7 +169,7 @@ export class GitHubService {
     } else if (eventType === 'push') {
       return this.parsePushEvent(webhookData);
     }
-    
+
     return null;
   }
 
@@ -148,7 +178,7 @@ export class GitHubService {
     const repository = webhookData.repository || {};
     const owner = repository.owner?.login || '';
     const repo = repository.name || '';
-    
+
     return {
       eventType: 'pull_request',
       action: webhookData.action,
@@ -172,7 +202,7 @@ export class GitHubService {
     const commits = webhookData.commits || [];
     const owner = repository.owner?.login || '';
     const repo = repository.name || '';
-    
+
     return {
       eventType: 'push',
       owner,

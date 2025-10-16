@@ -6,6 +6,7 @@ import { NotificationService } from '../notification/notification.service';
 import { GitLabService } from '../webhook/services/gitlab.service';
 import { GitHubService } from '../webhook/services/github.service';
 import * as crypto from 'crypto';
+import { ReviewResult } from '../llm/interfaces/llm-client.interface';
 
 @Injectable()
 export class ReviewService {
@@ -26,8 +27,11 @@ export class ReviewService {
 
   async handleMergeRequest(parsedData: any): Promise<void> {
     try {
-      const { projectId, mergeRequestIid, projectName, author, sourceBranch, targetBranch, url, webhookData } = parsedData;
+      const { projectId, mergeRequestIid, projectName, author, sourceBranch, targetBranch, url, webhookData, action } = parsedData;
 
+      if (action === "close") {
+        return;
+      }
       // 获取变更文件
       const changes = await this.gitlabService.getMergeRequestChanges(projectId, mergeRequestIid);
       const filteredChanges = this.filterChanges(changes);
@@ -56,9 +60,9 @@ export class ReviewService {
         targetBranch,
         updatedAt: Date.now(),
         commitMessages,
-        score: this.calculateScore(reviewResult),
+        score: this.calculateScore(reviewResult.overall),
         url,
-        reviewResult,
+        reviewResult: reviewResult.overall,
         urlSlug: this.slugifyUrl(url),
         webhookData,
         additions,
@@ -66,12 +70,30 @@ export class ReviewService {
         lastCommitId,
       });
 
+      // 行级评论
+      const {
+        diff_refs: diffRefs
+      } = await this.gitlabService.getMergeRequest(projectId, mergeRequestIid) as any;
+      for (const c of reviewResult.inlineComments) {
+        try {
+          await this.gitlabService.addMergeRequestDiscussions(projectId, mergeRequestIid, c.comment, {
+            line: c.line,
+            filePath: c.file,
+            baseSha: diffRefs?.base_sha,
+            headSha: diffRefs?.head_sha,
+            startSha: diffRefs?.start_sha,
+          });
+        } catch (e) {
+          console.warn(`Failed to comment on ${c.file}:${c.line} -> ${e.message}`);
+        }
+      }
+
       // 添加评论到Merge Request
-      await this.gitlabService.addMergeRequestNote(projectId, mergeRequestIid, reviewResult);
+      await this.gitlabService.addMergeRequestNote(projectId, mergeRequestIid, reviewResult.overall);
 
       // 发送通知
       await this.notificationService.sendNotification({
-        content: reviewResult,
+        content: reviewResult.overall,
         title: `代码审查 - ${projectName}`,
         msgType: 'markdown',
       });
@@ -85,7 +107,7 @@ export class ReviewService {
     try {
       const { action, pullNumber, owner, repo, projectName, author, sourceBranch, targetBranch, url, webhookData } = parsedData;
 
-      if(action === 'closed') {
+      if (action === 'closed') {
         return;
       }
 
@@ -132,9 +154,9 @@ export class ReviewService {
         targetBranch,
         updatedAt: Date.now(),
         commitMessages,
-        score: this.calculateScore(reviewResult),
+        score: this.calculateScore(reviewResult.overall),
         url,
-        reviewResult,
+        reviewResult: reviewResult.overall,
         urlSlug: this.slugifyUrl(url),
         webhookData,
         additions,
@@ -143,12 +165,27 @@ export class ReviewService {
         lastChangeHash: filesHash,
       });
 
+      // 行级评论
+      const headCommitId = commits[commits.length - 1]?.sha || '';
+      for (const c of reviewResult.inlineComments) {
+        try {
+          await this.githubService.createPullRequestLineComment(owner, repo, pullNumber, {
+            file: c.file,
+            line: c.line,
+            comment: c.comment,
+            commitId: headCommitId,
+          });
+        } catch (e) {
+          console.warn(`Failed to comment on ${c.file}:${c.line} -> ${e.message}`);
+        }
+      }
+
       // 添加评论到Pull Request
-      await this.githubService.createPullRequestComment(owner, repo, pullNumber, reviewResult);
+      await this.githubService.createPullRequestComment(owner, repo, pullNumber, reviewResult.overall);
 
       // 发送通知
       await this.notificationService.sendNotification({
-        content: reviewResult,
+        content: reviewResult.overall,
         title: `代码审查 - ${projectName}`,
         prTitle: webhookData?.pull_request?.title,
         msgType: 'markdown',
@@ -162,7 +199,7 @@ export class ReviewService {
   async handlePush(parsedData: any): Promise<void> {
     try {
       const pushReviewEnabled = this.configService.get<string>('PUSH_REVIEW_ENABLED') === '1';
-      
+
       if (!pushReviewEnabled) {
         console.log('Push review is disabled');
         return;
@@ -211,8 +248,8 @@ export class ReviewService {
         branch: branchName,
         updatedAt: Date.now(),
         commitMessages,
-        score: this.calculateScore(reviewResult),
-        reviewResult,
+        score: this.calculateScore(reviewResult.overall),
+        reviewResult: reviewResult.overall,
         urlSlug: this.slugifyUrl(parsedData.projectUrl || ''),
         webhookData,
         additions,
@@ -223,16 +260,16 @@ export class ReviewService {
       if (parsedData.eventType === 'push' && parsedData.owner && parsedData.repo) {
         // GitHub
         const lastCommit = commits[commits.length - 1];
-        await this.githubService.createCommitComment(parsedData.owner, parsedData.repo, lastCommit.id, reviewResult);
+        await this.githubService.createCommitComment(parsedData.owner, parsedData.repo, lastCommit.id, reviewResult.overall);
       } else if (parsedData.eventType === 'push' && parsedData.projectId) {
         // GitLab
         const lastCommit = commits[commits.length - 1];
-        await this.gitlabService.addCommitComment(parsedData.projectId, lastCommit.id, reviewResult);
+        await this.gitlabService.addCommitComment(parsedData.projectId, lastCommit.id, reviewResult.overall);
       }
 
       // 发送通知
       await this.notificationService.sendNotification({
-        content: reviewResult,
+        content: reviewResult.overall,
         title: `代码审查 - ${projectName}`,
         msgType: 'markdown',
       });
@@ -245,8 +282,8 @@ export class ReviewService {
   private filterChanges(changes: any[]): any[] {
     return changes
       .filter(change => !change.deleted_file)
-      .filter(change => 
-        this.supportedExtensions.some(ext => 
+      .filter(change =>
+        this.supportedExtensions.some(ext =>
           change.new_path?.endsWith(ext)
         )
       )
@@ -260,8 +297,8 @@ export class ReviewService {
 
   private filterGitHubChanges(files: any[]): any[] {
     return files
-      .filter(file => 
-        this.supportedExtensions.some(ext => 
+      .filter(file =>
+        this.supportedExtensions.some(ext =>
           file.filename?.endsWith(ext)
         )
       )
@@ -281,9 +318,8 @@ export class ReviewService {
     return (diff.match(/^-(?!--)/gm) || []).length;
   }
 
-  private async generateCodeReview(changes: any[], commitMessages: string): Promise<string> {
+  private async generateCodeReview(changes: any[], commitMessages: string): Promise<ReviewResult> {
     const llmClient = this.llmFactory.getClient();
-    
     // 合并所有变更的diff
     const combinedDiff = changes
       .map(change => `文件: ${change.new_path}\n${change.diff}`)
@@ -296,19 +332,19 @@ export class ReviewService {
     // 简单的评分逻辑，可以根据审查结果的内容来计算
     const positiveKeywords = ['good', 'excellent', 'well', 'nice', 'great', 'perfect'];
     const negativeKeywords = ['error', 'bug', 'issue', 'problem', 'wrong', 'bad'];
-    
-    const positiveCount = positiveKeywords.reduce((count, keyword) => 
+
+    const positiveCount = positiveKeywords.reduce((count, keyword) =>
       count + (reviewResult.toLowerCase().match(new RegExp(keyword, 'g')) || []).length, 0
     );
-    const negativeCount = negativeKeywords.reduce((count, keyword) => 
+    const negativeCount = negativeKeywords.reduce((count, keyword) =>
       count + (reviewResult.toLowerCase().match(new RegExp(keyword, 'g')) || []).length, 0
     );
-    
+
     // 基础分数 70，根据关键词调整
     let score = 70;
     score += positiveCount * 5;
     score -= negativeCount * 10;
-    
+
     return Math.max(0, Math.min(100, score));
   }
 
