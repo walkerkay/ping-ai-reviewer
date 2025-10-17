@@ -1,10 +1,9 @@
-export interface ReviewResult {
-  summary: string;
-  detail: string;
-}
+import { outputExample } from '../prompts/base/outro';
+
+export type LLMReviewResult = typeof outputExample;
 
 export interface LLMClient {
-  generateReview(diff: string, commitMessages: string): Promise<ReviewResult>;
+  generateReview(diff: string, commitMessages: string): Promise<LLMReviewResult>;
   generateReport(commits: any[]): Promise<string>;
 }
 
@@ -15,4 +14,3 @@ export interface LLMConfig {
   temperature?: number;
   maxTokens?: number;
 }
-

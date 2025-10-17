@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import {
   LLMClient,
   LLMConfig,
-  ReviewResult,
+  LLMReviewResult,
 } from '../interfaces/llm-client.interface';
 
 @Injectable()
@@ -22,7 +22,7 @@ export abstract class BaseLLMClient implements LLMClient {
   abstract generateReview(
     diff: string,
     commitMessages: string,
-  ): Promise<ReviewResult>;
+  ): Promise<LLMReviewResult>;
 
   abstract generateReport(commits: any[]): Promise<string>;
 

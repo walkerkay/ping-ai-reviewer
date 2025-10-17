@@ -1,7 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { MergeRequestReview, MergeRequestReviewDocument } from './schemas/merge-request-review.schema';
+import {
+  MergeRequestReview,
+  MergeRequestReviewDocument,
+} from './schemas/merge-request-review.schema';
 import { PushReview, PushReviewDocument } from './schemas/push-review.schema';
 
 export interface ReviewQuery {
@@ -21,12 +24,16 @@ export class DatabaseService {
   ) {}
 
   // Merge Request Review 相关方法
-  async createMergeRequestReview(reviewData: Partial<MergeRequestReview>): Promise<MergeRequestReview> {
+  async createMergeRequestReview(
+    reviewData: Partial<MergeRequestReview>,
+  ): Promise<MergeRequestReview> {
     const review = new this.mergeRequestReviewModel(reviewData);
     return review.save();
   }
 
-  async getMergeRequestReviews(query: ReviewQuery = {}): Promise<MergeRequestReview[]> {
+  async getMergeRequestReviews(
+    query: ReviewQuery = {},
+  ): Promise<MergeRequestReview[]> {
     const filter: any = {};
 
     if (query.authors && query.authors.length > 0) {
@@ -110,10 +117,6 @@ export class DatabaseService {
       filter.updatedAt = { ...filter.updatedAt, $lte: query.updatedAtLte };
     }
 
-    return this.pushReviewModel
-      .find(filter)
-      .sort({ updatedAt: -1 })
-      .exec();
+    return this.pushReviewModel.find(filter).sort({ updatedAt: -1 }).exec();
   }
 }
-
