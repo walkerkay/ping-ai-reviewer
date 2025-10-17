@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { BaseLLMClient } from './base-llm.client';
-import { LLMConfig, ReviewResult } from '../interfaces/llm-client.interface';
+import { LLMConfig, LLMReviewResult } from '../interfaces/llm-client.interface';
 
 @Injectable()
 export class OpenAIClient extends BaseLLMClient {
@@ -24,7 +24,10 @@ export class OpenAIClient extends BaseLLMClient {
     };
   }
 
-  async generateReview(diff: string, commitMessages: string): Promise<ReviewResult> {
+  async generateReview(
+    diff: string,
+    commitMessages: string,
+  ): Promise<LLMReviewResult> {
     const prompt = this.buildReviewPrompt(diff, commitMessages);
 
     try {
@@ -57,8 +60,10 @@ export class OpenAIClient extends BaseLLMClient {
       );
 
       return {
-        summary: '',
-        detail: response.data.choices[0].message.content,
+        overview: '',
+        detailComment: response.data.choices[0].message.content,
+        lineComments: [],
+        notification: '',
       };
     } catch (error) {
       throw new Error(`OpenAI API error: ${error.message}`);

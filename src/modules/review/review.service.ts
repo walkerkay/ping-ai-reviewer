@@ -6,7 +6,7 @@ import { NotificationService } from '../notification/notification.service';
 import { GitLabService } from '../webhook/services/gitlab.service';
 import { GitHubService } from '../webhook/services/github.service';
 import * as crypto from 'crypto';
-import { ReviewResult } from '../llm/interfaces/llm-client.interface';
+import { LLMReviewResult } from '../llm/interfaces/llm-client.interface';
 
 @Injectable()
 export class ReviewService {
@@ -81,9 +81,9 @@ export class ReviewService {
         targetBranch,
         updatedAt: Date.now(),
         commitMessages,
-        score: this.calculateScore(reviewResult.detail),
+        score: this.calculateScore(reviewResult.detailComment),
         url,
-        reviewResult: reviewResult.detail,
+        reviewResult: reviewResult.detailComment,
         urlSlug: this.slugifyUrl(url),
         webhookData,
         additions,
@@ -95,13 +95,13 @@ export class ReviewService {
       await this.gitlabService.addMergeRequestNote(
         projectId,
         mergeRequestIid,
-        reviewResult.detail,
+        reviewResult.detailComment,
       );
 
-      if (reviewResult.summary) {
+      if (reviewResult.notification) {
         // 发送通知
         await this.notificationService.sendNotification({
-          content: reviewResult.summary,
+          content: reviewResult.notification,
           title: `PingReviewer - ${projectName}`,
           msgType: 'text',
         });
@@ -193,9 +193,9 @@ export class ReviewService {
         targetBranch,
         updatedAt: Date.now(),
         commitMessages,
-        score: this.calculateScore(reviewResult.detail),
+        score: this.calculateScore(reviewResult.detailComment),
         url,
-        reviewResult: reviewResult.detail,
+        reviewResult: reviewResult.detailComment,
         urlSlug: this.slugifyUrl(url),
         webhookData,
         additions,
@@ -209,13 +209,13 @@ export class ReviewService {
         owner,
         repo,
         pullNumber,
-        reviewResult.detail,
+        reviewResult.detailComment,
       );
 
-      if (reviewResult.summary) {
+      if (reviewResult.notification) {
         // 发送通知
         await this.notificationService.sendNotification({
-          content: reviewResult.summary,
+          content: reviewResult.notification,
           title: `PingReviewer - ${projectName}`,
           msgType: 'text',
           additions: {
@@ -302,8 +302,8 @@ export class ReviewService {
         branch: branchName,
         updatedAt: Date.now(),
         commitMessages,
-        score: this.calculateScore(reviewResult.detail),
-        reviewResult: reviewResult.detail,
+        score: this.calculateScore(reviewResult.detailComment),
+        reviewResult: reviewResult.detailComment,
         urlSlug: this.slugifyUrl(parsedData.projectUrl || ''),
         webhookData,
         additions,
@@ -322,7 +322,7 @@ export class ReviewService {
           parsedData.owner,
           parsedData.repo,
           lastCommit.id,
-          reviewResult.detail,
+          reviewResult.detailComment,
         );
       } else if (parsedData.eventType === 'push' && parsedData.projectId) {
         // GitLab
@@ -330,14 +330,14 @@ export class ReviewService {
         await this.gitlabService.addCommitComment(
           parsedData.projectId,
           lastCommit.id,
-          reviewResult.detail,
+          reviewResult.detailComment,
         );
       }
 
-      if (reviewResult.summary) {
+      if (reviewResult.notification) {
         // 发送通知
         await this.notificationService.sendNotification({
-          content: reviewResult.summary,
+          content: reviewResult.notification,
           title: `PingReviewer - ${projectName}`,
           msgType: 'text',
         });
@@ -385,7 +385,7 @@ export class ReviewService {
   private async generateCodeReview(
     changes: any[],
     commitMessages: string,
-  ): Promise<ReviewResult> {
+  ): Promise<LLMReviewResult> {
     const llmClient = this.llmFactory.getClient();
 
     // 合并所有变更的diff

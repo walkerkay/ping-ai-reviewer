@@ -3,7 +3,8 @@ import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { BaseLLMClient } from './base-llm.client';
-import { LLMConfig, ReviewResult } from '../interfaces/llm-client.interface';
+import { LLMConfig, LLMReviewResult } from '../interfaces/llm-client.interface';
+import { PromptBuilder } from '../prompts/prompt-builder';
 
 @Injectable()
 export class DeepSeekClient extends BaseLLMClient {
@@ -27,8 +28,13 @@ export class DeepSeekClient extends BaseLLMClient {
   async generateReview(
     diff: string,
     commitMessages: string,
-  ): Promise<ReviewResult> {
-    const prompt = this.buildReviewPrompt(diff, commitMessages);
+  ): Promise<LLMReviewResult> {
+    const promptMessages = PromptBuilder.buildReviewPrompt({
+      language: '中文',
+      mode: 'light',
+      diff,
+      commitMessages,
+    });
 
     try {
       const response = await firstValueFrom(
@@ -37,33 +43,7 @@ export class DeepSeekClient extends BaseLLMClient {
           {
             model: this.getModel(),
             response_format: { type: 'json_object' },
-            messages: [
-              {
-                role: 'system',
-                content: `
-                你是一个专业的代码审查专家，请对代码进行详细审查并提供建设性建议，返回JSON格式数据, 格式如下：
-                  {
-                    "summary": "总结",
-                    "detail": "详细建议"
-                  }
-                  要求：
-                  1. summary 尽量简洁明了，适合发送通知，要用 \n 实现正确的换行，不要超过5点建议 
-                  2. detail 是详细的Review 意见，可用 markdown 格式
-                  3. 状态可为：✅ 可合并（Minor）、⚠️ 可合并（存在优化）、❌ 不可合并（有严重问题）
-
-                  示例输出：
-                  {
-                    "summary": "状态：❌ 不可合并 \n 1.存在 2 处命名不规范问题，建议修改变量名。 \n 2.存在 1 处严重缺陷",
-                    "detail": "1. 代码结构清晰，逻辑正确。\n2. 存在 2 处命名不规范问题，建议修改变量名。\n3. 无潜在安全或性能问题。"
-                  }
-
-                `,
-              },
-              {
-                role: 'user',
-                content: prompt,
-              },
-            ],
+            messages: promptMessages,
             temperature: this.getTemperature(),
             max_tokens: this.getMaxTokens(),
           },
@@ -78,7 +58,7 @@ export class DeepSeekClient extends BaseLLMClient {
       try {
         const reviewResult = JSON.parse(
           response.data.choices[0].message.content,
-        ) as ReviewResult;
+        ) as LLMReviewResult;
         return reviewResult;
       } catch (error) {
         throw new Error(`parse review result error: ${error.message}`);
@@ -124,28 +104,6 @@ export class DeepSeekClient extends BaseLLMClient {
     } catch (error) {
       throw new Error(`DeepSeek API error: ${error.message}`);
     }
-  }
-
-  private buildReviewPrompt(diff: string, commitMessages: string): string {
-    return `
-请对以下代码变更进行审查：
-
-提交信息：${commitMessages}
-
-代码变更：
-\`\`\`
-${diff}
-\`\`\`
-
-请从以下角度进行审查：
-1. 代码质量和规范性
-2. 潜在的安全问题
-3. 性能优化建议
-4. 可维护性和可读性
-5. 最佳实践建议
-
-请提供具体的改进建议和代码示例。
-    `.trim();
   }
 
   private buildReportPrompt(commits: any[]): string {
