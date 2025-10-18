@@ -3,13 +3,11 @@ import { ReviewService } from './review.service';
 import { DatabaseModule } from '../database/database.module';
 import { LlmModule } from '../llm/llm.module';
 import { NotificationModule } from '../notification/notification.module';
-import { HttpModule } from '@nestjs/axios';
-import { GitLabClient } from '../git/clients/gitlab.client';
-import { GitHubClient } from '../git/clients/github.client';
+import { GitModule } from '../git/git.module';
 
 @Module({
-  imports: [DatabaseModule, LlmModule, NotificationModule, HttpModule],
-  providers: [ReviewService, GitLabClient, GitHubClient],
+  imports: [DatabaseModule, LlmModule, NotificationModule, GitModule],
+  providers: [ReviewService],
   exports: [ReviewService],
 })
 export class ReviewModule {}

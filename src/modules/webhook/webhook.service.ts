@@ -12,16 +12,20 @@ export class WebhookService {
 
   async handleGitLabWebhook(webhookData: any): Promise<{ message: string }> {
     try {
-      const gitlabClient = this.gitFactory.createGitClient(GitClientType.GITLAB);
+      const gitlabClient = this.gitFactory.createGitClient(
+        GitClientType.GITLAB,
+      );
       const parsedData = gitlabClient.parseWebhookData(webhookData);
-      
+
       if (!parsedData) {
         return { message: 'Unsupported GitLab event type' };
       }
 
-      if (parsedData.eventType === 'merge_request') {
-        await this.reviewService.handleMergeRequest(parsedData);
-        return { message: 'GitLab merge request event processed asynchronously' };
+      if (parsedData.eventType === 'pull_request') {
+        await this.reviewService.handlePullRequest(parsedData);
+        return {
+          message: 'GitLab merge request event processed asynchronously',
+        };
       } else if (parsedData.eventType === 'push') {
         await this.reviewService.handlePush(parsedData);
         return { message: 'GitLab push event processed asynchronously' };
@@ -34,18 +38,25 @@ export class WebhookService {
     }
   }
 
-  async handleGitHubWebhook(webhookData: any, eventType: string): Promise<{ message: string }> {
+  async handleGitHubWebhook(
+    webhookData: any,
+    eventType: string,
+  ): Promise<{ message: string }> {
     try {
-      const githubClient = this.gitFactory.createGitClient(GitClientType.GITHUB);
+      const githubClient = this.gitFactory.createGitClient(
+        GitClientType.GITHUB,
+      );
       const parsedData = githubClient.parseWebhookData(webhookData, eventType);
-      
+
       if (!parsedData) {
         return { message: 'Unsupported GitHub event type' };
       }
 
       if (parsedData.eventType === 'pull_request') {
         await this.reviewService.handlePullRequest(parsedData);
-        return { message: 'GitHub pull request event processed asynchronously' };
+        return {
+          message: 'GitHub pull request event processed asynchronously',
+        };
       } else if (parsedData.eventType === 'push') {
         await this.reviewService.handlePush(parsedData);
         return { message: 'GitHub push event processed asynchronously' };
@@ -58,4 +69,3 @@ export class WebhookService {
     }
   }
 }
-

@@ -3,6 +3,11 @@ import { BaseGitClient } from './base-git.client';
 import {
   GitClientConfig,
   GitClientType,
+  PullRequestInfo,
+  PushInfo,
+  FileChange,
+  CommitInfo,
+  ParsedWebhookData,
 } from '../interfaces/git-client.interface';
 import { GitLabWebhookDto } from '../../webhook/dto/webhook.dto';
 
@@ -26,32 +31,76 @@ export class GitLabClient extends BaseGitClient {
     return `${this.config.url}/api/v4`;
   }
 
-  async getPullRequestFiles(
-    owner: string,
-    repo: string,
-    pullNumber: number,
-  ): Promise<any[]> {
+  private transformCommits(commits: any[]): CommitInfo[] {
+    return commits.map((commit) => this.transformCommit(commit));
+  }
+
+  private transformCommit(commit: any): CommitInfo {
+    return {
+      id: commit.id || commit.sha,
+      message: commit.message,
+      author: commit.author_name || commit.author?.name || 'unknown',
+      timestamp:
+        commit.created_at || commit.timestamp || new Date().toISOString(),
+    };
+  }
+
+  private getFileStatus(
+    file: any,
+  ): 'added' | 'modified' | 'removed' | 'renamed' {
+    if (file.new_file) return 'added';
+    if (file.deleted_file) return 'removed';
+    if (file.renamed_file) return 'renamed';
+    return 'modified';
+  }
+
+  private countAdditions(diff: string): number {
+    return (diff.match(/^\+(?!\+\+)/gm) || []).length;
+  }
+
+  private countDeletions(diff: string): number {
+    return (diff.match(/^-(?!--)/gm) || []).length;
+  }
+
+  private transformFiles(files: any[]): FileChange[] {
+    return files.map((file) => ({
+      filename: file.new_path || file.old_path || file.path,
+      additions: this.countAdditions(file.diff || ''),
+      deletions: this.countDeletions(file.diff || ''),
+      changes:
+        this.countAdditions(file.diff || '') +
+        this.countDeletions(file.diff || ''),
+      patch: file.diff || '',
+      status: this.getFileStatus(file),
+    }));
+  }
+
+  private async getMergeRequestFiles(
+    projectId: string,
+    mergeRequestIid: number,
+  ): Promise<FileChange[]> {
     // GitLab 使用项目 ID 和 Merge Request IID
     const url = this.buildApiUrl(
-      `/projects/${repo}/merge_requests/${pullNumber}/changes?access_raw_diffs=true`,
+      `/projects/${projectId}/merge_requests/${mergeRequestIid}/changes?access_raw_diffs=true`,
     );
 
     try {
       const data = await this.makeGetRequest(url);
-      return data.changes || [];
+      const files = data.changes || [];
+      const transformedFiles = this.transformFiles(files);
+      return this.filterReviewableFiles(transformedFiles);
     } catch (error) {
       console.error('Failed to get merge request changes:', error.message);
       return [];
     }
   }
 
-  async getPullRequestCommits(
-    owner: string,
-    repo: string,
-    pullNumber: number,
+  private async getMergeRequestCommits(
+    projectId: string,
+    mergeRequestIid: number,
   ): Promise<any[]> {
     const url = this.buildApiUrl(
-      `/projects/${repo}/merge_requests/${pullNumber}/commits`,
+      `/projects/${projectId}/merge_requests/${mergeRequestIid}/commits`,
     );
 
     try {
@@ -63,14 +112,99 @@ export class GitLabClient extends BaseGitClient {
     }
   }
 
+  private async getMergeRequestData(
+    projectId: string,
+    mergeRequestIid: number,
+  ): Promise<any> {
+    const url = this.buildApiUrl(
+      `/projects/${projectId}/merge_requests/${mergeRequestIid}`,
+    );
+    return await this.makeGetRequest(url);
+  }
+
+  async getPullRequestInfo(
+    owner: string,
+    projectId: string,
+    mergeRequestIid: number,
+  ): Promise<PullRequestInfo> {
+    const [mrData, files, commits] = await Promise.all([
+      this.getMergeRequestData(projectId, mergeRequestIid),
+      this.getMergeRequestFiles(projectId, mergeRequestIid),
+      this.getMergeRequestCommits(projectId, mergeRequestIid),
+    ]);
+
+    return {
+      id: mrData.id.toString(),
+      number: mrData.iid,
+      title: mrData.title,
+      author: mrData.author.username,
+      sourceBranch: mrData.source_branch,
+      targetBranch: mrData.target_branch,
+      url: mrData.web_url,
+      files,
+      commits: this.transformCommits(commits),
+      webhookData: mrData,
+    };
+  }
+
+  private async getCommitData(
+    projectId: string,
+    commitSha: string,
+  ): Promise<any> {
+    const url = this.buildApiUrl(
+      `/projects/${projectId}/projectIdsitory/commits/${commitSha}`,
+    );
+    return await this.makeGetRequest(url);
+  }
+
+  private async getCommitFiles(
+    projectId: string,
+    commitSha: string,
+  ): Promise<FileChange[]> {
+    const url = this.buildApiUrl(
+      `/projects/${projectId}/projectIdsitory/commits/${commitSha}`,
+    );
+
+    try {
+      const data = await this.makeGetRequest(url);
+      const files = data.files || [];
+      const transformedFiles = this.transformFiles(files);
+      return this.filterReviewableFiles(transformedFiles);
+    } catch (error) {
+      console.error('Failed to get commit files:', error.message);
+      return [];
+    }
+  }
+
+  async getPushInfo(
+    owner: string,
+    projectId: string,
+    commitSha: string,
+  ): Promise<PushInfo> {
+    const [commitData, files] = await Promise.all([
+      this.getCommitData(projectId, commitSha),
+      this.getCommitFiles(projectId, commitSha),
+    ]);
+
+    return {
+      id: commitSha,
+      author: commitData.author_name,
+      branch: commitData.branch || 'unknown',
+      url: commitData.web_url,
+      files, // 已经是过滤后的 FileChange[] 类型
+      commits: [this.transformCommit(commitData)],
+      webhookData: commitData,
+    };
+  }
+
   async createPullRequestComment(
     owner: string,
-    repo: string,
+    projectId: string,
     pullNumber: number,
     body: string,
   ): Promise<boolean> {
     const url = this.buildApiUrl(
-      `/projects/${repo}/merge_requests/${pullNumber}/notes`,
+      `/projects/${projectId}/merge_requests/${pullNumber}/notes`,
     );
 
     try {
@@ -84,12 +218,12 @@ export class GitLabClient extends BaseGitClient {
 
   async createCommitComment(
     owner: string,
-    repo: string,
+    projectId: string,
     commitSha: string,
     body: string,
   ): Promise<boolean> {
     const url = this.buildApiUrl(
-      `/projects/${repo}/repository/commits/${commitSha}/comments`,
+      `/projects/${projectId}/projectIdsitory/commits/${commitSha}/comments`,
     );
 
     try {
@@ -101,35 +235,13 @@ export class GitLabClient extends BaseGitClient {
     }
   }
 
-  async getCommitFiles(
-    owner: string,
-    repo: string,
-    commitSha: string,
-  ): Promise<any[]> {
-    const url = this.buildApiUrl(
-      `/projects/${repo}/repository/commits/${commitSha}`,
-    );
-
-    try {
-      const data = await this.makeGetRequest(url);
-      return data.files || [];
-    } catch (error) {
-      console.error('Failed to get commit files:', error.message);
-      return [];
-    }
-  }
-
-  /**
-   * 获取指定路径的文件内容
-   */
-  async getContent(
-    owner: string,
-    repo: string,
+  private async getContent(
+    projectId: string,
     path: string,
     ref: string = 'main',
   ): Promise<any> {
     const url = this.buildApiUrl(
-      `/projects/${repo}/repository/files/${encodeURIComponent(path)}`,
+      `/projects/${projectId}/projectIdsitory/files/${encodeURIComponent(path)}`,
     );
 
     try {
@@ -141,17 +253,14 @@ export class GitLabClient extends BaseGitClient {
     }
   }
 
-  /**
-   * 获取指定路径的文件内容（解码后的文本）
-   */
   async getContentAsText(
     owner: string,
-    repo: string,
+    projectId: string,
     path: string,
     ref: string = 'main',
   ): Promise<string | null> {
     try {
-      const content = await this.getContent(owner, repo, path, ref);
+      const content = await this.getContent(projectId, path, ref);
 
       if (!content || !content.content) {
         return null;
@@ -168,7 +277,10 @@ export class GitLabClient extends BaseGitClient {
     }
   }
 
-  parseWebhookData(webhookData: GitLabWebhookDto, eventType?: string): any {
+  parseWebhookData(
+    webhookData: GitLabWebhookDto,
+    eventType?: string,
+  ): ParsedWebhookData | null {
     const objectKind = webhookData.object_kind;
 
     if (objectKind === 'merge_request') {
@@ -180,91 +292,56 @@ export class GitLabClient extends BaseGitClient {
     return null;
   }
 
-  private parseMergeRequestEvent(webhookData: GitLabWebhookDto): any {
+  private parseMergeRequestEvent(
+    webhookData: GitLabWebhookDto,
+  ): ParsedWebhookData {
     const objectAttributes = webhookData.object_attributes || {};
     const project = webhookData.project || {};
 
     return {
-      eventType: 'merge_request',
+      clientType: GitClientType.GITLAB,
+      eventType: 'pull_request',
+      owner: project.path_with_namespace?.split('/')[0] || '',
+      projectId: project.id?.toString() || '',
+      repo: project.id?.toString() || '',
       mergeRequestIid: objectAttributes.iid,
-      projectId: objectAttributes.target_project_id,
-      action: objectAttributes.action,
-      sourceBranch: objectAttributes.source_branch,
-      targetBranch: objectAttributes.target_branch,
       projectName: project.name,
-      projectUrl: project.web_url,
       author:
         objectAttributes.author?.name ||
-        objectAttributes.last_commit?.author?.name,
+        objectAttributes.last_commit?.author?.name ||
+        '',
+      sourceBranch: objectAttributes.source_branch,
+      targetBranch: objectAttributes.target_branch,
       url: objectAttributes.url,
+      commits: [], // 将在后续获取
       webhookData,
     };
   }
 
-  private parsePushEvent(webhookData: GitLabWebhookDto): any {
+  private parsePushEvent(webhookData: GitLabWebhookDto): ParsedWebhookData {
     const project = webhookData.project || {};
     const ref = webhookData.ref || '';
     const branchName = ref.replace('refs/heads/', '');
     const commits = webhookData.commits || [];
 
     return {
+      clientType: GitClientType.GITLAB,
       eventType: 'push',
-      projectId: project.id,
-      branchName,
+      owner: project.path_with_namespace?.split('/')[0] || '',
+      projectId: project.id?.toString() || '',
+      repo: project.id?.toString() || '',
       projectName: project.name,
-      projectUrl: project.web_url,
-      commits,
-      before: webhookData.before,
-      after: webhookData.after,
+      author:
+        (webhookData as any).user_name || commits[0]?.author?.name || 'unknown',
+      branchName,
+      url: project.web_url,
+      commits: commits.map((commit) => ({
+        id: commit.id,
+        message: commit.message,
+        author: commit.author?.name || 'unknown',
+        timestamp: commit.timestamp,
+      })),
       webhookData,
     };
-  }
-
-  /**
-   * 比较两个提交之间的差异
-   */
-  async getRepositoryCompare(
-    projectId: string,
-    before: string,
-    after: string,
-  ): Promise<any[]> {
-    const url = this.buildApiUrl(
-      `/projects/${projectId}/repository/compare?from=${before}&to=${after}`,
-    );
-
-    try {
-      const data = await this.makeGetRequest(url);
-      return data.diffs || [];
-    } catch (error) {
-      console.error('Failed to get repository compare:', error.message);
-      return [];
-    }
-  }
-
-  /**
-   * GitLab 特有的方法：检查目标分支是否受保护
-   */
-  async isTargetBranchProtected(
-    projectId: string,
-    targetBranch: string,
-  ): Promise<boolean> {
-    const url = this.buildApiUrl(`/projects/${projectId}/protected_branches`);
-
-    try {
-      const data = await this.makeGetRequest(url);
-      const protectedBranches = data || [];
-      return protectedBranches.some((branch: any) =>
-        this.matchesBranchPattern(targetBranch, branch.name),
-      );
-    } catch (error) {
-      console.error('Failed to check protected branches:', error.message);
-      return false;
-    }
-  }
-
-  private matchesBranchPattern(branch: string, pattern: string): boolean {
-    // 简单的通配符匹配实现
-    const regex = new RegExp(pattern.replace(/\*/g, '.*'));
-    return regex.test(branch);
   }
 }

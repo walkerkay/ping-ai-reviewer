@@ -23,7 +23,7 @@ export class MergeRequestReview {
   @Prop({ required: true })
   commitMessages: string;
 
-  @Prop({ required: true })
+  @Prop({ required: false })
   score: number;
 
   @Prop({ required: true })

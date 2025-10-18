@@ -5,11 +5,11 @@ import { firstValueFrom } from 'rxjs';
 import {
   GitClientInterface,
   GitClientConfig,
+  PullRequestInfo,
+  PushInfo,
+  FileChange,
 } from '../interfaces/git-client.interface';
 
-/**
- * 基础 Git 客户端抽象类
- */
 @Injectable()
 export abstract class BaseGitClient implements GitClientInterface {
   protected config: GitClientConfig;
@@ -21,31 +21,16 @@ export abstract class BaseGitClient implements GitClientInterface {
     this.config = this.initializeConfig();
   }
 
-  /**
-   * 初始化配置（子类需要实现）
-   */
   protected abstract initializeConfig(): GitClientConfig;
 
-  /**
-   * 获取认证头信息（子类需要实现）
-   */
   protected abstract getAuthHeaders(): Record<string, string>;
 
-  /**
-   * 获取 API 基础 URL（子类需要实现）
-   */
   protected abstract getApiBaseUrl(): string;
 
-  /**
-   * 构建 API 请求 URL
-   */
   protected buildApiUrl(endpoint: string): string {
     return `${this.getApiBaseUrl()}${endpoint}`;
   }
 
-  /**
-   * 执行 HTTP GET 请求
-   */
   protected async makeGetRequest(
     url: string,
     params?: Record<string, any>,
@@ -65,9 +50,6 @@ export abstract class BaseGitClient implements GitClientInterface {
     }
   }
 
-  /**
-   * 执行 HTTP POST 请求
-   */
   protected async makePostRequest(url: string, data: any): Promise<any> {
     try {
       const response = await firstValueFrom(
@@ -86,17 +68,30 @@ export abstract class BaseGitClient implements GitClientInterface {
     }
   }
 
-  abstract getPullRequestFiles(
-    owner: string,
-    repo: string,
-    pullNumber: number,
-  ): Promise<any[]>;
+  protected filterReviewableFiles(files: FileChange[]): FileChange[] {
+    const supportedExtensions = this.configService
+      .get<string>(
+        'SUPPORTED_EXTENSIONS',
+        '.java,.py,.php,.js,.ts,.vue,.yml,.json,.md,.sql',
+      )
+      .split(',');
 
-  abstract getPullRequestCommits(
+    return files.filter((file) =>
+      supportedExtensions.some((ext) => file.filename.endsWith(ext)),
+    );
+  }
+
+  abstract getPullRequestInfo(
     owner: string,
     repo: string,
     pullNumber: number,
-  ): Promise<any[]>;
+  ): Promise<PullRequestInfo>;
+
+  abstract getPushInfo(
+    owner: string,
+    repo: string,
+    commitSha: string,
+  ): Promise<PushInfo>;
 
   abstract createPullRequestComment(
     owner: string,
@@ -111,19 +106,6 @@ export abstract class BaseGitClient implements GitClientInterface {
     commitSha: string,
     body: string,
   ): Promise<boolean>;
-
-  abstract getCommitFiles(
-    owner: string,
-    repo: string,
-    commitSha: string,
-  ): Promise<any[]>;
-
-  abstract getContent(
-    owner: string,
-    repo: string,
-    path: string,
-    ref?: string,
-  ): Promise<any>;
 
   abstract getContentAsText(
     owner: string,

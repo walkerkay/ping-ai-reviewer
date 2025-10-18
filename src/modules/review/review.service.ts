@@ -3,158 +3,51 @@ import { ConfigService } from '@nestjs/config';
 import { DatabaseService } from '../database/database.service';
 import { LLMFactory } from '../llm/llm.factory';
 import { NotificationService } from '../notification/notification.service';
+import {
+  GitClientInterface,
+  PullRequestInfo,
+  FileChange,
+  ParsedWebhookData,
+} from '../git/interfaces/git-client.interface';
+import { GitFactory } from '../git/git.factory';
 import * as crypto from 'crypto';
 import { LLMReviewResult } from '../llm/interfaces/llm-client.interface';
-import { GitLabClient } from '../git/clients/gitlab.client';
-import { GitHubClient } from '../git/clients/github.client';
 
 @Injectable()
 export class ReviewService {
-  private supportedExtensions: string[];
-
   constructor(
     private configService: ConfigService,
     private databaseService: DatabaseService,
     private llmFactory: LLMFactory,
     private notificationService: NotificationService,
-    private githubClient: GitHubClient,
-    private gitlabClient: GitLabClient,
-  ) {
-    this.supportedExtensions = this.configService
-      .get<string>('SUPPORTED_EXTENSIONS', '.java,.py,.php')
-      .split(',');
-  }
+    private gitFactory: GitFactory,
+  ) {}
 
-  async handleMergeRequest(parsedData: any): Promise<void> {
+  /**
+   * 处理Pull Request/Merge Request
+   */
+  async handlePullRequest(parsedData: ParsedWebhookData): Promise<void> {
     try {
-      const {
-        projectId,
-        mergeRequestIid,
-        projectName,
-        author,
-        sourceBranch,
-        targetBranch,
-        url,
-        webhookData,
-      } = parsedData;
-
-      // 获取变更文件
-      const changes = await this.gitlabClient.getPullRequestFiles(
-        '',
-        projectId,
-        mergeRequestIid,
+      const gitClient = this.getGitClient(parsedData);
+      const pullRequestInfo = await gitClient.getPullRequestInfo(
+        parsedData.owner,
+        parsedData.repo,
+        parsedData.pullNumber || parsedData.mergeRequestIid,
       );
-      const filteredChanges = this.filterChanges(changes);
 
-      if (filteredChanges.length === 0) {
+      // 文件已经在 Git 客户端中过滤过了
+      if (pullRequestInfo.files.length === 0) {
         console.log('No supported file changes found');
         return;
       }
 
-      // 获取提交信息
-      const commits = await this.gitlabClient.getPullRequestCommits(
-        '',
-        projectId,
-        mergeRequestIid,
-      );
-      const commitMessages = commits.map((commit) => commit.message).join('; ');
-
-      // 生成代码审查
-      const reviewResult = await this.generateCodeReview(
-        filteredChanges,
-        commitMessages,
-      );
-
-      // 保存到数据库
-      const additions = filteredChanges.reduce(
-        (sum, change) => sum + (change.additions || 0),
-        0,
-      );
-      const deletions = filteredChanges.reduce(
-        (sum, change) => sum + (change.deletions || 0),
-        0,
-      );
-      const lastCommitId = commits[commits.length - 1]?.id || '';
-
-      await this.databaseService.createMergeRequestReview({
-        projectName,
-        author,
-        sourceBranch,
-        targetBranch,
-        updatedAt: Date.now(),
-        commitMessages,
-        score: this.calculateScore(reviewResult.detailComment),
-        url,
-        reviewResult: reviewResult.detailComment,
-        urlSlug: this.slugifyUrl(url),
-        webhookData,
-        additions,
-        deletions,
-        lastCommitId,
-      });
-
-      // 添加评论到Merge Request
-      await this.gitlabClient.createPullRequestComment(
-        '',
-        projectId,
-        mergeRequestIid,
-        reviewResult.detailComment,
-      );
-
-      if (reviewResult.notification) {
-        // 发送通知
-        await this.notificationService.sendNotification({
-          content: reviewResult.notification,
-          title: `PingReviewer - ${projectName}`,
-          msgType: 'text',
-        });
-      }
-    } catch (error) {
-      console.error('Merge request review failed:', error.message);
-    }
-  }
-
-  async handlePullRequest(parsedData: any): Promise<void> {
-    try {
-      const {
-        action,
-        pullNumber,
-        owner,
-        repo,
-        projectName,
-        author,
-        sourceBranch,
-        targetBranch,
-        url,
-        webhookData,
-      } = parsedData;
-
-      if (action === 'closed') {
-        return;
-      }
-
-      // 获取变更文件
-      const files = await this.githubClient.getPullRequestFiles(
-        owner,
-        repo,
-        pullNumber,
-      );
-      const filteredChanges = this.filterGitHubChanges(files);
-
-      if (filteredChanges.length === 0) {
-        console.log('No supported file changes found');
-        return;
-      }
-
-      // 生成文件变更哈希
-      const filesHash = this.generateFilesHash(filteredChanges);
-
-      // 检查是否已经存在相同的文件变更
+      // 检查重复审查
+      const filesHash = this.generateFilesHash(pullRequestInfo.files);
       const hasExistingReview =
         await this.databaseService.checkMergeRequestFilesHashExists(
-          projectName,
-          sourceBranch,
-          targetBranch,
+          parsedData.projectName,
+          pullRequestInfo.sourceBranch,
+          pullRequestInfo.targetBranch,
           filesHash,
         );
 
@@ -163,78 +56,60 @@ export class ReviewService {
         return;
       }
 
-      // 获取提交信息
-      const commits = await this.githubClient.getPullRequestCommits(
-        owner,
-        repo,
-        pullNumber,
-      );
-      const commitMessages = commits
-        .map((commit) => commit.commit.message)
-        .join('; ');
-
       // 生成代码审查
+      const commitMessages = pullRequestInfo.commits
+        .map((commit) => commit.message)
+        .join('; ');
       const reviewResult = await this.generateCodeReview(
-        filteredChanges,
+        pullRequestInfo.files,
         commitMessages,
       );
 
       // 保存到数据库
-      const additions = filteredChanges.reduce(
-        (sum, change) => sum + (change.additions || 0),
-        0,
-      );
-      const deletions = filteredChanges.reduce(
-        (sum, change) => sum + (change.deletions || 0),
-        0,
-      );
+      const additions = this.calculateAdditions(pullRequestInfo.files);
+      const deletions = this.calculateDeletions(pullRequestInfo.files);
 
       await this.databaseService.createMergeRequestReview({
-        projectName,
-        author,
-        sourceBranch,
-        targetBranch,
+        projectName: parsedData.projectName,
+        author: pullRequestInfo.author,
+        sourceBranch: pullRequestInfo.sourceBranch,
+        targetBranch: pullRequestInfo.targetBranch,
         updatedAt: Date.now(),
         commitMessages,
-        score: this.calculateScore(reviewResult.detailComment),
-        url,
+        url: pullRequestInfo.url,
         reviewResult: reviewResult.detailComment,
-        urlSlug: this.slugifyUrl(url),
-        webhookData,
+        urlSlug: this.slugifyUrl(pullRequestInfo.url),
+        webhookData: pullRequestInfo.webhookData,
         additions,
         deletions,
-        lastCommitId: '',
+        lastCommitId:
+          pullRequestInfo.commits[pullRequestInfo.commits.length - 1]?.id || '',
         lastChangeHash: filesHash,
       });
 
-      // 添加评论到Pull Request
-      await this.githubClient.createPullRequestComment(
-        owner,
-        repo,
-        pullNumber,
+      // 添加评论
+      await gitClient.createPullRequestComment(
+        parsedData.owner,
+        parsedData.repo,
+        pullRequestInfo.number,
         reviewResult.detailComment,
       );
 
-      if (reviewResult.notification) {
-        // 发送通知
-        await this.notificationService.sendNotification({
-          content: reviewResult.notification,
-          title: `PingReviewer - ${projectName}`,
-          msgType: 'text',
-          additions: {
-            pullRequest: {
-              title: webhookData?.pull_request?.title,
-              url: webhookData?.pull_request?.html_url,
-            },
-          },
-        });
-      }
+      // 发送通知
+      await this.sendReviewNotification(
+        reviewResult,
+        parsedData.projectName,
+        pullRequestInfo,
+      );
     } catch (error) {
       console.error('Pull request review failed:', error.message);
     }
   }
 
-  async handlePush(parsedData: any): Promise<void> {
+  /**
+   * 处理Push事件
+   */
+  async handlePush(parsedData: ParsedWebhookData): Promise<void> {
     try {
       const pushReviewEnabled =
         this.configService.get<string>('PUSH_REVIEW_ENABLED') === '1';
@@ -244,204 +119,92 @@ export class ReviewService {
         return;
       }
 
-      const { projectName, author, branchName, commits, webhookData } =
-        parsedData;
+      const gitClient = this.getGitClient(parsedData);
+      const lastCommit = parsedData.commits[parsedData.commits.length - 1];
 
-      if (!commits || commits.length === 0) {
-        console.log('No commits found in push event');
-        return;
-      }
+      const pushInfo = await gitClient.getPushInfo(
+        parsedData.owner,
+        parsedData.repo,
+        lastCommit.id,
+      );
 
-      // 获取变更文件
-      let changes = [];
-      if (
-        parsedData.eventType === 'push' &&
-        parsedData.owner &&
-        parsedData.repo
-      ) {
-        // GitHub push
-        const lastCommit = commits[commits.length - 1];
-        changes = await this.githubClient.getCommitFiles(
-          parsedData.owner,
-          parsedData.repo,
-          lastCommit.id,
-        );
-        changes = this.filterGitHubChanges(changes);
-      } else if (parsedData.eventType === 'push' && parsedData.projectId) {
-        // GitLab push
-        changes = await this.gitlabClient.getRepositoryCompare(
-          parsedData.projectId,
-          parsedData.before,
-          parsedData.after,
-        );
-        changes = this.filterChanges(changes);
-      }
-
-      if (changes.length === 0) {
+      // 文件已经在 Git 客户端中过滤过了
+      if (pushInfo.files.length === 0) {
         console.log('No supported file changes found');
         return;
       }
 
       // 生成代码审查
-      const commitMessages = commits.map((commit) => commit.message).join('; ');
+      const commitMessages = pushInfo.commits
+        .map((commit) => commit.message)
+        .join('; ');
       const reviewResult = await this.generateCodeReview(
-        changes,
+        pushInfo.files,
         commitMessages,
       );
 
       // 保存到数据库
-      const additions = changes.reduce(
-        (sum, change) => sum + (change.additions || 0),
-        0,
-      );
-      const deletions = changes.reduce(
-        (sum, change) => sum + (change.deletions || 0),
-        0,
-      );
+      const additions = this.calculateAdditions(pushInfo.files);
+      const deletions = this.calculateDeletions(pushInfo.files);
 
       await this.databaseService.createPushReview({
-        projectName,
-        author,
-        branch: branchName,
+        projectName: parsedData.projectName,
+        author: pushInfo.author,
+        branch: pushInfo.branch,
         updatedAt: Date.now(),
         commitMessages,
-        score: this.calculateScore(reviewResult.detailComment),
         reviewResult: reviewResult.detailComment,
-        urlSlug: this.slugifyUrl(parsedData.projectUrl || ''),
-        webhookData,
+        urlSlug: this.slugifyUrl(pushInfo.url),
+        webhookData: pushInfo.webhookData,
         additions,
         deletions,
       });
 
-      // 添加评论到提交
-      if (
-        parsedData.eventType === 'push' &&
-        parsedData.owner &&
-        parsedData.repo
-      ) {
-        // GitHub
-        const lastCommit = commits[commits.length - 1];
-        await this.githubClient.createCommitComment(
-          parsedData.owner,
-          parsedData.repo,
-          lastCommit.id,
-          reviewResult.detailComment,
-        );
-      } else if (parsedData.eventType === 'push' && parsedData.projectId) {
-        // GitLab
-        const lastCommit = commits[commits.length - 1];
-        await this.gitlabClient.createCommitComment(
-          '',
-          parsedData.projectId,
-          lastCommit.id,
-          reviewResult.detailComment,
-        );
-      }
+      // 添加评论
+      const pushLastCommit = pushInfo.commits[pushInfo.commits.length - 1];
+      await gitClient.createCommitComment(
+        parsedData.owner,
+        parsedData.repo,
+        pushLastCommit.id,
+        reviewResult.detailComment,
+      );
 
-      if (reviewResult.notification) {
-        // 发送通知
-        await this.notificationService.sendNotification({
-          content: reviewResult.notification,
-          title: `PingReviewer - ${projectName}`,
-          msgType: 'text',
-        });
-      }
+      // 发送通知
+      await this.sendReviewNotification(
+        reviewResult,
+        parsedData.projectName,
+        null,
+      );
     } catch (error) {
       console.error('Push review failed:', error.message);
     }
   }
 
-  private filterChanges(changes: any[]): any[] {
-    return changes
-      .filter((change) => !change.deleted_file)
-      .filter((change) =>
-        this.supportedExtensions.some((ext) => change.new_path?.endsWith(ext)),
-      )
-      .map((change) => ({
-        diff: change.diff || '',
-        new_path: change.new_path,
-        additions: this.countAdditions(change.diff || ''),
-        deletions: this.countDeletions(change.diff || ''),
-      }));
+  /**
+   * 根据解析数据获取对应的Git客户端
+   */
+  private getGitClient(parsedData: ParsedWebhookData): GitClientInterface {
+    return this.gitFactory.createGitClient(parsedData.clientType);
   }
 
-  private filterGitHubChanges(files: any[]): any[] {
-    return files
-      .filter((file) =>
-        this.supportedExtensions.some((ext) => file.filename?.endsWith(ext)),
-      )
-      .map((file) => ({
-        diff: file.patch || '',
-        new_path: file.filename,
-        additions: file.additions || 0,
-        deletions: file.deletions || 0,
-      }));
-  }
 
-  private countAdditions(diff: string): number {
-    return (diff.match(/^\+(?!\+\+)/gm) || []).length;
-  }
-
-  private countDeletions(diff: string): number {
-    return (diff.match(/^-(?!--)/gm) || []).length;
-  }
-
+  /**
+   * 生成代码审查
+   */
   private async generateCodeReview(
-    changes: any[],
+    changes: FileChange[],
     commitMessages: string,
   ): Promise<LLMReviewResult> {
     const llmClient = this.llmFactory.getClient();
-
-    // 合并所有变更的diff
     const combinedDiff = changes
-      .map((change) => `文件: ${change.new_path}\n${change.diff}`)
+      .map((change) => `文件: ${change.filename}\n${change.patch}`)
       .join('\n\n');
-
     return await llmClient.generateReview(combinedDiff, commitMessages);
   }
 
-  private calculateScore(reviewResult: string): number {
-    // 简单的评分逻辑，可以根据审查结果的内容来计算
-    const positiveKeywords = [
-      'good',
-      'excellent',
-      'well',
-      'nice',
-      'great',
-      'perfect',
-    ];
-    const negativeKeywords = [
-      'error',
-      'bug',
-      'issue',
-      'problem',
-      'wrong',
-      'bad',
-    ];
-
-    const positiveCount = positiveKeywords.reduce(
-      (count, keyword) =>
-        count +
-        (reviewResult.toLowerCase().match(new RegExp(keyword, 'g')) || [])
-          .length,
-      0,
-    );
-    const negativeCount = negativeKeywords.reduce(
-      (count, keyword) =>
-        count +
-        (reviewResult.toLowerCase().match(new RegExp(keyword, 'g')) || [])
-          .length,
-      0,
-    );
-
-    // 基础分数 70，根据关键词调整
-    let score = 70;
-    score += positiveCount * 5;
-    score -= negativeCount * 10;
-
-    return Math.max(0, Math.min(100, score));
-  }
-
+  /**
+   * 生成URL slug
+   */
   private slugifyUrl(url: string): string {
     return url
       .replace(/^https?:\/\//, '')
@@ -451,28 +214,64 @@ export class ReviewService {
   }
 
   /**
-   * 生成文件变更的哈希值
-   * @param changes 文件变更列表
-   * @returns 哈希值
+   * 计算文件变更的添加行数
    */
-  private generateFilesHash(changes: any[]): string {
-    // 使用文件变更内容的哈希，而不是文件本身的SHA
-    // 这样可以检测到相同的文件变更，避免重复生成Review
+  private calculateAdditions(changes: FileChange[]): number {
+    return changes.reduce((sum, change) => sum + change.additions, 0);
+  }
+
+  /**
+   * 计算文件变更的删除行数
+   */
+  private calculateDeletions(changes: FileChange[]): number {
+    return changes.reduce((sum, change) => sum + change.deletions, 0);
+  }
+
+  /**
+   * 发送审查通知
+   */
+  private async sendReviewNotification(
+    reviewResult: LLMReviewResult,
+    projectName: string,
+    pullRequestInfo: PullRequestInfo | null,
+  ): Promise<void> {
+    if (!reviewResult.notification) {
+      return;
+    }
+
+    await this.notificationService.sendNotification({
+      content: reviewResult.notification,
+      title: `PingReviewer - ${projectName}`,
+      msgType: 'text',
+      additions: pullRequestInfo
+        ? {
+            pullRequest: {
+              title: pullRequestInfo.title,
+              url: pullRequestInfo.url,
+            },
+          }
+        : undefined,
+    });
+  }
+
+  /**
+   * 生成文件变更哈希
+   */
+  private generateFilesHash(changes: FileChange[]): string {
     const changeContent = changes
       .map((change) => ({
-        path: change.filename || change.new_path,
-        additions: change.additions || 0,
-        deletions: change.deletions || 0,
-        patch: change.patch || change.diff || '',
+        path: change.filename,
+        additions: change.additions,
+        deletions: change.deletions,
+        patch: change.patch,
       }))
-      .sort((a, b) => a.path.localeCompare(b.path)) // 按路径排序确保一致性
+      .sort((a, b) => a.path.localeCompare(b.path))
       .map(
         (change) =>
           `${change.path}:${change.additions}:${change.deletions}:${change.patch}`,
       )
       .join('|');
 
-    // 生成SHA256哈希
     return crypto.createHash('sha256').update(changeContent).digest('hex');
   }
 }
