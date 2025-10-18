@@ -1,15 +1,13 @@
 import { Module } from '@nestjs/common';
-import { HttpModule } from '@nestjs/axios';
 import { WebhookController } from './webhook.controller';
 import { WebhookService } from './webhook.service';
-import { GitLabService } from './services/gitlab.service';
-import { GitHubService } from './services/github.service';
+import { GitModule } from '../git/git.module';
 import { ReviewModule } from '../review/review.module';
 
 @Module({
-  imports: [HttpModule, ReviewModule],
+  imports: [GitModule, ReviewModule],
   controllers: [WebhookController],
-  providers: [WebhookService, GitLabService, GitHubService],
+  providers: [WebhookService],
 })
 export class WebhookModule {}
 
