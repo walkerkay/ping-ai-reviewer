@@ -3,10 +3,10 @@ import { ConfigService } from '@nestjs/config';
 import { DatabaseService } from '../database/database.service';
 import { LLMFactory } from '../llm/llm.factory';
 import { NotificationService } from '../notification/notification.service';
-import { GitLabService } from '../webhook/services/gitlab.service';
-import { GitHubService } from '../webhook/services/github.service';
 import * as crypto from 'crypto';
 import { LLMReviewResult } from '../llm/interfaces/llm-client.interface';
+import { GitLabClient } from '../git/clients/gitlab.client';
+import { GitHubClient } from '../git/clients/github.client';
 
 @Injectable()
 export class ReviewService {
@@ -17,8 +17,8 @@ export class ReviewService {
     private databaseService: DatabaseService,
     private llmFactory: LLMFactory,
     private notificationService: NotificationService,
-    private gitlabService: GitLabService,
-    private githubService: GitHubService,
+    private githubClient: GitHubClient,
+    private gitlabClient: GitLabClient,
   ) {
     this.supportedExtensions = this.configService
       .get<string>('SUPPORTED_EXTENSIONS', '.java,.py,.php')
@@ -39,7 +39,8 @@ export class ReviewService {
       } = parsedData;
 
       // 获取变更文件
-      const changes = await this.gitlabService.getMergeRequestChanges(
+      const changes = await this.gitlabClient.getPullRequestFiles(
+        '',
         projectId,
         mergeRequestIid,
       );
@@ -51,7 +52,8 @@ export class ReviewService {
       }
 
       // 获取提交信息
-      const commits = await this.gitlabService.getMergeRequestCommits(
+      const commits = await this.gitlabClient.getPullRequestCommits(
+        '',
         projectId,
         mergeRequestIid,
       );
@@ -92,7 +94,8 @@ export class ReviewService {
       });
 
       // 添加评论到Merge Request
-      await this.gitlabService.addMergeRequestNote(
+      await this.gitlabClient.createPullRequestComment(
+        '',
         projectId,
         mergeRequestIid,
         reviewResult.detailComment,
@@ -131,7 +134,7 @@ export class ReviewService {
       }
 
       // 获取变更文件
-      const files = await this.githubService.getPullRequestFiles(
+      const files = await this.githubClient.getPullRequestFiles(
         owner,
         repo,
         pullNumber,
@@ -161,7 +164,7 @@ export class ReviewService {
       }
 
       // 获取提交信息
-      const commits = await this.githubService.getPullRequestCommits(
+      const commits = await this.githubClient.getPullRequestCommits(
         owner,
         repo,
         pullNumber,
@@ -205,7 +208,7 @@ export class ReviewService {
       });
 
       // 添加评论到Pull Request
-      await this.githubService.createPullRequestComment(
+      await this.githubClient.createPullRequestComment(
         owner,
         repo,
         pullNumber,
@@ -258,7 +261,7 @@ export class ReviewService {
       ) {
         // GitHub push
         const lastCommit = commits[commits.length - 1];
-        changes = await this.githubService.getCommitFiles(
+        changes = await this.githubClient.getCommitFiles(
           parsedData.owner,
           parsedData.repo,
           lastCommit.id,
@@ -266,7 +269,7 @@ export class ReviewService {
         changes = this.filterGitHubChanges(changes);
       } else if (parsedData.eventType === 'push' && parsedData.projectId) {
         // GitLab push
-        changes = await this.gitlabService.getRepositoryCompare(
+        changes = await this.gitlabClient.getRepositoryCompare(
           parsedData.projectId,
           parsedData.before,
           parsedData.after,
@@ -318,7 +321,7 @@ export class ReviewService {
       ) {
         // GitHub
         const lastCommit = commits[commits.length - 1];
-        await this.githubService.createCommitComment(
+        await this.githubClient.createCommitComment(
           parsedData.owner,
           parsedData.repo,
           lastCommit.id,
@@ -327,7 +330,8 @@ export class ReviewService {
       } else if (parsedData.eventType === 'push' && parsedData.projectId) {
         // GitLab
         const lastCommit = commits[commits.length - 1];
-        await this.gitlabService.addCommitComment(
+        await this.gitlabClient.createCommitComment(
+          '',
           parsedData.projectId,
           lastCommit.id,
           reviewResult.detailComment,

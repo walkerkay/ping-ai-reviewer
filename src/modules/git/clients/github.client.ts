@@ -1,85 +1,61 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
-import { firstValueFrom } from 'rxjs';
-import { GitHubWebhookDto } from '../dto/webhook.dto';
+import { BaseGitClient } from './base-git.client';
+import { GitClientConfig, GitClientType } from '../interfaces/git-client.interface';
+import { GitHubWebhookDto } from '../../webhook/dto/webhook.dto';
 
 @Injectable()
-export class GitHubService {
-  private githubToken: string;
-  private githubUrl: string;
+export class GitHubClient extends BaseGitClient {
+  protected initializeConfig(): GitClientConfig {
+    return {
+      token: this.configService.get<string>('GITHUB_ACCESS_TOKEN'),
+      url: this.configService.get<string>('GITHUB_URL', 'https://api.github.com'),
+      type: GitClientType.GITHUB,
+    };
+  }
 
-  constructor(
-    private configService: ConfigService,
-    private httpService: HttpService,
-  ) {
-    this.githubToken = this.configService.get<string>('GITHUB_ACCESS_TOKEN');
-    this.githubUrl = this.configService.get<string>('GITHUB_URL', 'https://api.github.com');
+  protected getAuthHeaders(): Record<string, string> {
+    return {
+      'Authorization': `Bearer ${this.config.token}`,
+      'Accept': 'application/vnd.github.v3+json',
+    };
+  }
+
+  protected getApiBaseUrl(): string {
+    return this.config.url;
   }
 
   async getPullRequestFiles(owner: string, repo: string, pullNumber: number): Promise<any[]> {
-    const url = `${this.githubUrl}/repos/${owner}/${repo}/pulls/${pullNumber}/files`;
+    const url = this.buildApiUrl(`/repos/${owner}/${repo}/pulls/${pullNumber}/files`);
     
     try {
-      const response = await firstValueFrom(
-        this.httpService.get(url, {
-          headers: {
-            'Authorization': `Bearer ${this.githubToken}`,
-            'Accept': 'application/vnd.github.v3+json',
-          },
-        }),
-      );
-
-      return response.data || [];
+      const data = await this.makeGetRequest(url);
+      return data || [];
     } catch (error) {
       console.error('Failed to get pull request files:', error.message);
-      console.error('Request URL:', url);
-      console.error('Error details:', error.response?.data || error);
       return [];
     }
   }
 
   async getPullRequestCommits(owner: string, repo: string, pullNumber: number): Promise<any[]> {
-    const url = `${this.githubUrl}/repos/${owner}/${repo}/pulls/${pullNumber}/commits`;
+    const url = this.buildApiUrl(`/repos/${owner}/${repo}/pulls/${pullNumber}/commits`);
     
     try {
-      const response = await firstValueFrom(
-        this.httpService.get(url, {
-          headers: {
-            'Authorization': `Bearer ${this.githubToken}`,
-            'Accept': 'application/vnd.github.v3+json',
-          },
-        }),
-      );
-
-      return response.data || [];
+      const data = await this.makeGetRequest(url);
+      return data || [];
     } catch (error) {
       console.error('Failed to get pull request commits:', error.message);
-      console.error('Request URL:', url);
-      console.error('Error details:', error.response?.data || error);
       return [];
     }
   }
 
   async createPullRequestComment(owner: string, repo: string, pullNumber: number, body: string): Promise<boolean> {
-    const url = `${this.githubUrl}/repos/${owner}/${repo}/issues/${pullNumber}/comments`;
+    const url = this.buildApiUrl(`/repos/${owner}/${repo}/issues/${pullNumber}/comments`);
     
     try {
-      const response = await firstValueFrom(
-        this.httpService.post(
-          url,
-          { body },
-          {
-            headers: {
-              'Authorization': `Bearer ${this.githubToken}`,
-              'Accept': 'application/vnd.github.v3+json',
-              'Content-Type': 'application/json',
-            },
-          },
-        ),
-      );
-
-      return response.status === 201;
+      await this.makePostRequest(url, { body });
+      return true;
     } catch (error) {
       console.error('Failed to create pull request comment:', error.message);
       return false;
@@ -87,24 +63,11 @@ export class GitHubService {
   }
 
   async createCommitComment(owner: string, repo: string, commitSha: string, body: string): Promise<boolean> {
-    const url = `${this.githubUrl}/repos/${owner}/${repo}/commits/${commitSha}/comments`;
+    const url = this.buildApiUrl(`/repos/${owner}/${repo}/commits/${commitSha}/comments`);
     
     try {
-      const response = await firstValueFrom(
-        this.httpService.post(
-          url,
-          { body },
-          {
-            headers: {
-              'Authorization': `Bearer ${this.githubToken}`,
-              'Accept': 'application/vnd.github.v3+json',
-              'Content-Type': 'application/json',
-            },
-          },
-        ),
-      );
-
-      return response.status === 201;
+      await this.makePostRequest(url, { body });
+      return true;
     } catch (error) {
       console.error('Failed to create commit comment:', error.message);
       return false;
@@ -112,24 +75,49 @@ export class GitHubService {
   }
 
   async getCommitFiles(owner: string, repo: string, commitSha: string): Promise<any[]> {
-    const url = `${this.githubUrl}/repos/${owner}/${repo}/commits/${commitSha}`;
+    const url = this.buildApiUrl(`/repos/${owner}/${repo}/commits/${commitSha}`);
     
     try {
-      const response = await firstValueFrom(
-        this.httpService.get(url, {
-          headers: {
-            'Authorization': `Bearer ${this.githubToken}`,
-            'Accept': 'application/vnd.github.v3+json',
-          },
-        }),
-      );
-
-      return response.data.files || [];
+      const data = await this.makeGetRequest(url);
+      return data.files || [];
     } catch (error) {
       console.error('Failed to get commit files:', error.message);
-      console.error('Request URL:', url);
-      console.error('Error details:', error.response?.data || error);
       return [];
+    }
+  }
+
+  /**
+   * 获取指定路径的文件内容
+   */
+  async getContent(owner: string, repo: string, path: string, ref: string = 'main'): Promise<any> {
+    const url = this.buildApiUrl(`/repos/${owner}/${repo}/contents/${path}`);
+    
+    try {
+      const data = await this.makeGetRequest(url, { ref });
+      return data;
+    } catch (error) {
+      console.error('Failed to get content:', error.message);
+      return null;
+    }
+  }
+
+  /**
+   * 获取指定路径的文件内容（解码后的文本）
+   */
+  async getContentAsText(owner: string, repo: string, path: string, ref: string = 'main'): Promise<string | null> {
+    try {
+      const content = await this.getContent(owner, repo, path, ref);
+      
+      if (!content || !content.content) {
+        return null;
+      }
+
+      // 解码 base64 内容
+      const decodedContent = Buffer.from(content.content, 'base64').toString('utf-8');
+      return decodedContent;
+    } catch (error) {
+      console.error('Failed to get content as text:', error.message);
+      return null;
     }
   }
 
@@ -187,4 +175,3 @@ export class GitHubService {
     };
   }
 }
-

@@ -4,13 +4,12 @@ import { DatabaseModule } from '../database/database.module';
 import { LlmModule } from '../llm/llm.module';
 import { NotificationModule } from '../notification/notification.module';
 import { HttpModule } from '@nestjs/axios';
-import { GitLabService } from '../webhook/services/gitlab.service';
-import { GitHubService } from '../webhook/services/github.service';
+import { GitLabClient } from '../git/clients/gitlab.client';
+import { GitHubClient } from '../git/clients/github.client';
 
 @Module({
   imports: [DatabaseModule, LlmModule, NotificationModule, HttpModule],
-  providers: [ReviewService, GitLabService, GitHubService],
+  providers: [ReviewService, GitLabClient, GitHubClient],
   exports: [ReviewService],
 })
 export class ReviewModule {}
-

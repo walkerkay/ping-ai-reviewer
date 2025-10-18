@@ -1,19 +1,19 @@
 import { Injectable } from '@nestjs/common';
-import { GitLabService } from './services/gitlab.service';
-import { GitHubService } from './services/github.service';
+import { GitFactory } from '../git/git.factory';
+import { GitClientType } from '../git/interfaces/git-client.interface';
 import { ReviewService } from '../review/review.service';
 
 @Injectable()
 export class WebhookService {
   constructor(
-    private gitlabService: GitLabService,
-    private githubService: GitHubService,
+    private gitFactory: GitFactory,
     private reviewService: ReviewService,
   ) {}
 
   async handleGitLabWebhook(webhookData: any): Promise<{ message: string }> {
     try {
-      const parsedData = this.gitlabService.parseWebhookData(webhookData);
+      const gitlabClient = this.gitFactory.createGitClient(GitClientType.GITLAB);
+      const parsedData = gitlabClient.parseWebhookData(webhookData);
       
       if (!parsedData) {
         return { message: 'Unsupported GitLab event type' };
@@ -36,7 +36,8 @@ export class WebhookService {
 
   async handleGitHubWebhook(webhookData: any, eventType: string): Promise<{ message: string }> {
     try {
-      const parsedData = this.githubService.parseWebhookData(webhookData, eventType);
+      const githubClient = this.gitFactory.createGitClient(GitClientType.GITHUB);
+      const parsedData = githubClient.parseWebhookData(webhookData, eventType);
       
       if (!parsedData) {
         return { message: 'Unsupported GitHub event type' };
