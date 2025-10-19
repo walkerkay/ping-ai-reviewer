@@ -10,11 +10,14 @@ import {
   ParsedWebhookData,
 } from '../interfaces/git-client.interface';
 import { GitHubWebhookDto } from '../../webhook/dto/webhook.dto';
+import { Octokit } from '@octokit/rest';
 
 @Injectable()
 export class GitHubClient extends BaseGitClient {
+  private octokit: Octokit;
+
   protected initializeConfig(): GitClientConfig {
-    return {
+    const config = {
       type: GitClientType.GITHUB,
       token: this.configService.get<string>('GITHUB_ACCESS_TOKEN'),
       url: this.configService.get<string>(
@@ -22,18 +25,16 @@ export class GitHubClient extends BaseGitClient {
         'https://api.github.com',
       ),
     };
+    
+    // 初始化 Octokit 实例
+    this.octokit = new Octokit({
+      auth: config.token,
+      baseUrl: config.url,
+    });
+    
+    return config;
   }
 
-  protected getAuthHeaders(): Record<string, string> {
-    return {
-      Authorization: `Bearer ${this.config.token}`,
-      Accept: 'application/vnd.github.v3+json',
-    };
-  }
-
-  protected getApiBaseUrl(): string {
-    return this.config.url;
-  }
 
   private transformFiles(files: any[]): FileChange[] {
     return files.map((file) => ({
@@ -84,14 +85,13 @@ export class GitHubClient extends BaseGitClient {
     repo: string,
     pullNumber: number,
   ): Promise<FileChange[]> {
-    const url = this.buildApiUrl(
-      `/repos/${owner}/${repo}/pulls/${pullNumber}/files`,
-    );
-
     try {
-      const data = await this.makeGetRequest(url);
-      const files = data || [];
-      return this.transformFiles(files);
+      const { data: files } = await this.octokit.rest.pulls.listFiles({
+        owner,
+        repo,
+        pull_number: pullNumber,
+      });
+      return this.transformFiles(files || []);
     } catch (error) {
       console.error('Failed to get pull request files:', error.message);
       return [];
@@ -103,13 +103,13 @@ export class GitHubClient extends BaseGitClient {
     repo: string,
     pullNumber: number,
   ): Promise<any[]> {
-    const url = this.buildApiUrl(
-      `/repos/${owner}/${repo}/pulls/${pullNumber}/commits`,
-    );
-
     try {
-      const data = await this.makeGetRequest(url);
-      return data || [];
+      const { data: commits } = await this.octokit.rest.pulls.listCommits({
+        owner,
+        repo,
+        pull_number: pullNumber,
+      });
+      return commits || [];
     } catch (error) {
       console.error('Failed to get pull request commits:', error.message);
       return [];
@@ -121,8 +121,17 @@ export class GitHubClient extends BaseGitClient {
     repo: string,
     pullNumber: number,
   ): Promise<any> {
-    const url = this.buildApiUrl(`/repos/${owner}/${repo}/pulls/${pullNumber}`);
-    return await this.makeGetRequest(url);
+    try {
+      const { data: prData } = await this.octokit.rest.pulls.get({
+        owner,
+        repo,
+        pull_number: pullNumber,
+      });
+      return prData;
+    } catch (error) {
+      console.error('Failed to get pull request data:', error.message);
+      throw error;
+    }
   }
 
   async getPullRequestInfo(
@@ -156,13 +165,13 @@ export class GitHubClient extends BaseGitClient {
     repo: string,
     commitSha: string,
   ): Promise<FileChange[]> {
-    const url = this.buildApiUrl(
-      `/repos/${owner}/${repo}/commits/${commitSha}`,
-    );
-
     try {
-      const data = await this.makeGetRequest(url);
-      const files = data.files || [];
+      const { data: commitData } = await this.octokit.rest.repos.getCommit({
+        owner,
+        repo,
+        ref: commitSha,
+      });
+      const files = commitData.files || [];
       return this.transformFiles(files);
     } catch (error) {
       console.error('Failed to get commit files:', error.message);
@@ -175,10 +184,17 @@ export class GitHubClient extends BaseGitClient {
     repo: string,
     commitSha: string,
   ): Promise<any> {
-    const url = this.buildApiUrl(
-      `/repos/${owner}/${repo}/commits/${commitSha}`,
-    );
-    return await this.makeGetRequest(url);
+    try {
+      const { data: commitData } = await this.octokit.rest.repos.getCommit({
+        owner,
+        repo,
+        ref: commitSha,
+      });
+      return commitData;
+    } catch (error) {
+      console.error('Failed to get commit data:', error.message);
+      throw error;
+    }
   }
 
   async getPushInfo(
@@ -276,12 +292,13 @@ export class GitHubClient extends BaseGitClient {
     pullNumber: number,
     body: string,
   ): Promise<boolean> {
-    const url = this.buildApiUrl(
-      `/repos/${owner}/${repo}/issues/${pullNumber}/comments`,
-    );
-
     try {
-      await this.makePostRequest(url, { body });
+      await this.octokit.rest.issues.createComment({
+        owner,
+        repo,
+        issue_number: pullNumber,
+        body,
+      });
       return true;
     } catch (error) {
       console.error('Failed to create pull request comment:', error.message);
@@ -295,12 +312,13 @@ export class GitHubClient extends BaseGitClient {
     commitSha: string,
     body: string,
   ): Promise<boolean> {
-    const url = this.buildApiUrl(
-      `/repos/${owner}/${repo}/commits/${commitSha}/comments`,
-    );
-
     try {
-      await this.makePostRequest(url, { body });
+      await this.octokit.rest.repos.createCommitComment({
+        owner,
+        repo,
+        commit_sha: commitSha,
+        body,
+      });
       return true;
     } catch (error) {
       console.error('Failed to create commit comment:', error.message);
@@ -314,11 +332,14 @@ export class GitHubClient extends BaseGitClient {
     path: string,
     ref: string = 'main',
   ): Promise<any> {
-    const url = this.buildApiUrl(`/repos/${owner}/${repo}/contents/${path}`);
-
     try {
-      const data = await this.makeGetRequest(url, { ref });
-      return data;
+      const { data: content } = await this.octokit.rest.repos.getContent({
+        owner,
+        repo,
+        path,
+        ref,
+      });
+      return content;
     } catch (error) {
       console.error('Failed to get content:', error.message);
       return null;

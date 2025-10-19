@@ -1,6 +1,5 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { HttpService } from '@nestjs/axios';
 import { GitClientInterface, GitClientType } from './interfaces/git-client.interface';
 import { GitHubClient } from './clients/github.client';
 import { GitLabClient } from './clients/gitlab.client';
@@ -12,7 +11,6 @@ import { GitLabClient } from './clients/gitlab.client';
 export class GitFactory {
   constructor(
     private configService: ConfigService,
-    private httpService: HttpService,
   ) {}
 
   /**
@@ -23,9 +21,9 @@ export class GitFactory {
   createGitClient(type: GitClientType): GitClientInterface {
     switch (type) {
       case GitClientType.GITHUB:
-        return new GitHubClient(this.configService, this.httpService);
+        return new GitHubClient(this.configService);
       case GitClientType.GITLAB:
-        return new GitLabClient(this.configService, this.httpService);
+        return new GitLabClient(this.configService);
       default:
         throw new Error(`Unsupported Git client type: ${type}`);
     }
