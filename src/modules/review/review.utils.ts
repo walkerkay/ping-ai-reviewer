@@ -3,8 +3,14 @@ import {
   ProjectFilesConfig,
   ProjectTriggerConfig,
   ProjectReviewConfig,
-} from './interfaces/config.interface';
+  ProjectConfig,
+} from '../config/interfaces/config.interface';
+import { FileChange } from '../git/interfaces/git-client.interface';
+import * as crypto from 'crypto';
 
+/**
+ * 判断是否应该触发代码审查
+ */
 export function shouldTriggerReview(
   trigger: ProjectTriggerConfig,
   eventType: 'pull_request' | 'push',
@@ -62,6 +68,9 @@ export function shouldTriggerReview(
   return true;
 }
 
+/**
+ * 过滤可审查的文件
+ */
 export function filterReviewableFiles<T extends { filename: string }>(
   files: T[],
   filesConfig: ProjectFilesConfig,
@@ -105,6 +114,9 @@ export function filterReviewableFiles<T extends { filename: string }>(
   });
 }
 
+/**
+ * 检查审查限制
+ */
 export function checkReviewLimits<
   T extends { filename: string; patch?: string },
 >(files: T[], config: ProjectReviewConfig): boolean {
@@ -119,4 +131,88 @@ export function checkReviewLimits<
     totalContentLength += (file.patch || '').length;
   }
   return totalContentLength > config.max_content_length;
+}
+
+/**
+ * 判断是否应该跳过审查
+ */
+export async function shouldSkipReview(
+  config: ProjectConfig,
+  params: {
+    eventType: 'pull_request' | 'push';
+    branchName: string;
+    title?: string;
+    isDraft?: boolean;
+    files: FileChange[];
+  },
+): Promise<boolean> {
+  if (params.files.length === 0) {
+    console.log('No supported file changes found');
+    return true;
+  }
+  if (checkReviewLimits(params.files, config.review)) {
+    console.log('File count or size exceeds limit');
+    return true;
+  }
+
+  const shouldTrigger = shouldTriggerReview(
+    config.trigger,
+    params.eventType,
+    params.branchName,
+    params.title,
+    params.isDraft,
+  );
+
+  if (!shouldTrigger) {
+    console.log('Review trigger check failed, skipping review');
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * 生成文件变更的哈希值
+ */
+export function generateFilesHash(changes: FileChange[]): string {
+  const changeContent = changes
+    .map((change) => ({
+      path: change.filename,
+      additions: change.additions,
+      deletions: change.deletions,
+      patch: change.patch,
+    }))
+    .sort((a, b) => a.path.localeCompare(b.path))
+    .map(
+      (change) =>
+        `${change.path}:${change.additions}:${change.deletions}:${change.patch}`,
+    )
+    .join('|');
+
+  return crypto.createHash('sha256').update(changeContent).digest('hex');
+}
+
+/**
+ * 计算文件变更的添加行数
+ */
+export function calculateAdditions(changes: FileChange[]): number {
+  return changes.reduce((sum, change) => sum + change.additions, 0);
+}
+
+/**
+ * 计算文件变更的删除行数
+ */
+export function calculateDeletions(changes: FileChange[]): number {
+  return changes.reduce((sum, change) => sum + change.deletions, 0);
+}
+
+/**
+ * 将URL转换为slug格式
+ */
+export function slugifyUrl(url: string): string {
+  return url
+    .replace(/^https?:\/\//, '')
+    .replace(/[^a-zA-Z0-9]/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_|_$/g, '');
 }

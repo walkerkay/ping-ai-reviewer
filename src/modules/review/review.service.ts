@@ -10,15 +10,18 @@ import {
   ParsedWebhookData,
 } from '../git/interfaces/git-client.interface';
 import { GitFactory } from '../git/git.factory';
-import * as crypto from 'crypto';
 import { LLMReviewResult } from '../llm/interfaces/llm-client.interface';
 import { ProjectConfig } from '../config/interfaces/config.interface';
+import { parseConfig } from '../config';
 import {
-  checkReviewLimits,
   filterReviewableFiles,
-  parseConfig,
   shouldTriggerReview,
-} from '../config';
+  generateFilesHash,
+  calculateAdditions,
+  calculateDeletions,
+  slugifyUrl,
+  shouldSkipReview,
+} from './review.utils';
 
 @Injectable()
 export class ReviewService {
@@ -56,7 +59,7 @@ export class ReviewService {
         projectConfig.files,
       );
 
-      const shouldSkip = await this.shouldSkipReview(projectConfig, {
+      const shouldSkip = await shouldSkipReview(projectConfig, {
         eventType: 'pull_request',
         branchName: parsedData.targetBranch,
         files: pullRequestInfo.files,
@@ -68,7 +71,7 @@ export class ReviewService {
         return;
       }
 
-      const filesHash = this.generateFilesHash(pullRequestInfo.files);
+      const filesHash = generateFilesHash(pullRequestInfo.files);
 
       const hasExistingReview =
         await this.databaseService.checkMergeRequestFilesHashExists(
@@ -95,8 +98,8 @@ export class ReviewService {
       );
 
       // 保存到数据库
-      const additions = this.calculateAdditions(pullRequestInfo.files);
-      const deletions = this.calculateDeletions(pullRequestInfo.files);
+      const additions = calculateAdditions(pullRequestInfo.files);
+      const deletions = calculateDeletions(pullRequestInfo.files);
 
       await this.databaseService.createMergeRequestReview({
         projectName: parsedData.projectName,
@@ -107,7 +110,7 @@ export class ReviewService {
         commitMessages,
         url: pullRequestInfo.url,
         reviewResult: reviewResult.detailComment,
-        urlSlug: this.slugifyUrl(pullRequestInfo.url),
+        urlSlug: slugifyUrl(pullRequestInfo.url),
         webhookData: pullRequestInfo.webhookData,
         additions,
         deletions,
@@ -182,7 +185,7 @@ export class ReviewService {
         projectConfig.files,
       );
 
-      const shouldSkip = await this.shouldSkipReview(projectConfig, {
+      const shouldSkip = await shouldSkipReview(projectConfig, {
         eventType: 'push',
         branchName: parsedData.branchName,
         files: pushInfo.files,
@@ -203,8 +206,8 @@ export class ReviewService {
       );
 
       // 保存到数据库
-      const additions = this.calculateAdditions(pushInfo.files);
-      const deletions = this.calculateDeletions(pushInfo.files);
+      const additions = calculateAdditions(pushInfo.files);
+      const deletions = calculateDeletions(pushInfo.files);
 
       await this.databaseService.createPushReview({
         projectName: parsedData.projectName,
@@ -213,7 +216,7 @@ export class ReviewService {
         updatedAt: Date.now(),
         commitMessages,
         reviewResult: reviewResult.detailComment,
-        urlSlug: this.slugifyUrl(pushInfo.url),
+        urlSlug: slugifyUrl(pushInfo.url),
         webhookData: pushInfo.webhookData,
         additions,
         deletions,
@@ -258,41 +261,6 @@ export class ReviewService {
     return config;
   }
 
-  private async shouldSkipReview(
-    config: ProjectConfig,
-
-    params: {
-      eventType: 'pull_request' | 'push';
-      branchName: string;
-      title?: string;
-      isDraft?: boolean;
-      files: FileChange[];
-    },
-  ): Promise<boolean> {
-    if (params.files.length === 0) {
-      console.log('No supported file changes found');
-      return true;
-    }
-    if (checkReviewLimits(params.files, config.review)) {
-      console.log('File count or size exceeds limit');
-      return true;
-    }
-
-    const shouldTrigger = shouldTriggerReview(
-      config.trigger,
-      params.eventType,
-      params.branchName,
-      params.title,
-      params.isDraft,
-    );
-
-    if (!shouldTrigger) {
-      console.log('Review trigger check failed, skipping review');
-      return true;
-    }
-
-    return false;
-  }
 
   private async generateCodeReview(
     changes: FileChange[],
@@ -306,21 +274,7 @@ export class ReviewService {
     return await llmClient.generateReview(combinedDiff, commitMessages, config);
   }
 
-  private slugifyUrl(url: string): string {
-    return url
-      .replace(/^https?:\/\//, '')
-      .replace(/[^a-zA-Z0-9]/g, '_')
-      .replace(/_+/g, '_')
-      .replace(/^_|_$/g, '');
-  }
 
-  private calculateAdditions(changes: FileChange[]): number {
-    return changes.reduce((sum, change) => sum + change.additions, 0);
-  }
-
-  private calculateDeletions(changes: FileChange[]): number {
-    return changes.reduce((sum, change) => sum + change.deletions, 0);
-  }
 
   private async sendReviewNotification(
     reviewResult: LLMReviewResult,
@@ -346,21 +300,4 @@ export class ReviewService {
     });
   }
 
-  private generateFilesHash(changes: FileChange[]): string {
-    const changeContent = changes
-      .map((change) => ({
-        path: change.filename,
-        additions: change.additions,
-        deletions: change.deletions,
-        patch: change.patch,
-      }))
-      .sort((a, b) => a.path.localeCompare(b.path))
-      .map(
-        (change) =>
-          `${change.path}:${change.additions}:${change.deletions}:${change.patch}`,
-      )
-      .join('|');
-
-    return crypto.createHash('sha256').update(changeContent).digest('hex');
-  }
 }
