@@ -1,0 +1,47 @@
+version: 1.0
+review:
+  enabled: true
+  language: zh
+  mode: strict
+  max_review_length: 4000
+  max_files: 50
+  max_content_length: 20000
+files:
+  extensions:
+    - .ts
+  include:
+    - 'src/**/*'
+  exclude:
+    - 'src/examples/**/*'
+    - 'node_modules/**/*'
+trigger:
+  events:
+    - pull_request
+  branches:
+    - main
+  include_draft: false
+  ignore_rules:
+    title_contains:
+      - Release
+    branch_matches:
+      - release/*
+integrations:
+  pingcode:
+    notification:
+      enabled: true
+      template: |
+        🚀 代码审查完成
+        状态: {{ status }}
+        问题数: {{ issues }}
+        严重问题: {{ critical }}
+        审查人: AI CodeReviewer
+
+    push_summary: # 自动写入任务自定义字段
+      enabled: true
+      summary_field: ai_review_summary
+      template: |
+        🚀 代码审查完成
+        状态: {{ status }}
+        问题数: {{ issues }}
+        严重问题: {{ critical }}
+        审查人: AI CodeReviewer
