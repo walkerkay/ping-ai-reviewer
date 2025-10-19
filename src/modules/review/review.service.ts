@@ -12,6 +12,13 @@ import {
 import { GitFactory } from '../git/git.factory';
 import * as crypto from 'crypto';
 import { LLMReviewResult } from '../llm/interfaces/llm-client.interface';
+import { ProjectConfig } from '../config/interfaces/config.interface';
+import {
+  checkReviewLimits,
+  filterReviewableFiles,
+  parseConfig,
+  shouldTriggerReview,
+} from '../config';
 
 @Injectable()
 export class ReviewService {
@@ -23,26 +30,46 @@ export class ReviewService {
     private gitFactory: GitFactory,
   ) {}
 
-  /**
-   * 处理Pull Request/Merge Request
-   */
   async handlePullRequest(parsedData: ParsedWebhookData): Promise<void> {
     try {
       const gitClient = this.getGitClient(parsedData);
+
       const pullRequestInfo = await gitClient.getPullRequestInfo(
         parsedData.owner,
         parsedData.repo,
         parsedData.pullNumber || parsedData.mergeRequestIid,
       );
 
-      // 文件已经在 Git 客户端中过滤过了
-      if (pullRequestInfo.files.length === 0) {
-        console.log('No supported file changes found');
+      const projectConfig = await this.getProjectConfig(
+        gitClient,
+        parsedData.owner,
+        parsedData.repo,
+        parsedData.sourceBranch,
+      );
+
+      if (!projectConfig.review.enabled) {
         return;
       }
 
-      // 检查重复审查
+      pullRequestInfo.files = filterReviewableFiles(
+        pullRequestInfo.files,
+        projectConfig.files,
+      );
+
+      const shouldSkip = await this.shouldSkipReview(projectConfig, {
+        eventType: 'pull_request',
+        branchName: parsedData.targetBranch,
+        files: pullRequestInfo.files,
+        title: pullRequestInfo.title,
+        isDraft: pullRequestInfo.isDraft,
+      });
+
+      if (shouldSkip) {
+        return;
+      }
+
       const filesHash = this.generateFilesHash(pullRequestInfo.files);
+
       const hasExistingReview =
         await this.databaseService.checkMergeRequestFilesHashExists(
           parsedData.projectName,
@@ -60,9 +87,11 @@ export class ReviewService {
       const commitMessages = pullRequestInfo.commits
         .map((commit) => commit.message)
         .join('; ');
+
       const reviewResult = await this.generateCodeReview(
         pullRequestInfo.files,
         commitMessages,
+        projectConfig,
       );
 
       // 保存到数据库
@@ -106,9 +135,6 @@ export class ReviewService {
     }
   }
 
-  /**
-   * 处理Push事件
-   */
   async handlePush(parsedData: ParsedWebhookData): Promise<void> {
     try {
       const pushReviewEnabled =
@@ -120,6 +146,29 @@ export class ReviewService {
       }
 
       const gitClient = this.getGitClient(parsedData);
+
+      const projectConfig = await this.getProjectConfig(
+        gitClient,
+        parsedData.owner,
+        parsedData.repo,
+        parsedData.branchName,
+      );
+
+      if (!projectConfig.review.enabled) {
+        return;
+      }
+
+      // 检查是否需要触发审查
+      const shouldTrigger = shouldTriggerReview(
+        projectConfig.trigger,
+        'push',
+        parsedData.branchName,
+      );
+
+      if (!shouldTrigger) {
+        console.log('Review trigger check failed, skipping review');
+        return;
+      }
       const lastCommit = parsedData.commits[parsedData.commits.length - 1];
 
       const pushInfo = await gitClient.getPushInfo(
@@ -128,9 +177,18 @@ export class ReviewService {
         lastCommit.id,
       );
 
-      // 文件已经在 Git 客户端中过滤过了
-      if (pushInfo.files.length === 0) {
-        console.log('No supported file changes found');
+      pushInfo.files = filterReviewableFiles(
+        pushInfo.files,
+        projectConfig.files,
+      );
+
+      const shouldSkip = await this.shouldSkipReview(projectConfig, {
+        eventType: 'push',
+        branchName: parsedData.branchName,
+        files: pushInfo.files,
+      });
+
+      if (shouldSkip) {
         return;
       }
 
@@ -141,6 +199,7 @@ export class ReviewService {
       const reviewResult = await this.generateCodeReview(
         pushInfo.files,
         commitMessages,
+        projectConfig,
       );
 
       // 保存到数据库
@@ -180,31 +239,73 @@ export class ReviewService {
     }
   }
 
-  /**
-   * 根据解析数据获取对应的Git客户端
-   */
   private getGitClient(parsedData: ParsedWebhookData): GitClientInterface {
     return this.gitFactory.createGitClient(parsedData.clientType);
   }
 
+  private async getProjectConfig(
+    gitClient: GitClientInterface,
+    owner: string,
+    repo: string,
+    ref: string,
+  ): Promise<ProjectConfig> {
+    const [yamlConfig, ymlConfig] = await Promise.all([
+      gitClient.getContentAsText(owner, repo, '.codereview.yaml', ref),
+      gitClient.getContentAsText(owner, repo, '.codereview.yml', ref),
+    ]);
+    const configContent = yamlConfig || ymlConfig;
+    const config = parseConfig(configContent);
+    return config;
+  }
 
-  /**
-   * 生成代码审查
-   */
+  private async shouldSkipReview(
+    config: ProjectConfig,
+
+    params: {
+      eventType: 'pull_request' | 'push';
+      branchName: string;
+      title?: string;
+      isDraft?: boolean;
+      files: FileChange[];
+    },
+  ): Promise<boolean> {
+    if (params.files.length === 0) {
+      console.log('No supported file changes found');
+      return true;
+    }
+    if (checkReviewLimits(params.files, config.review)) {
+      console.log('File count or size exceeds limit');
+      return true;
+    }
+
+    const shouldTrigger = shouldTriggerReview(
+      config.trigger,
+      params.eventType,
+      params.branchName,
+      params.title,
+      params.isDraft,
+    );
+
+    if (!shouldTrigger) {
+      console.log('Review trigger check failed, skipping review');
+      return true;
+    }
+
+    return false;
+  }
+
   private async generateCodeReview(
     changes: FileChange[],
     commitMessages: string,
+    config: ProjectConfig,
   ): Promise<LLMReviewResult> {
     const llmClient = this.llmFactory.getClient();
     const combinedDiff = changes
       .map((change) => `文件: ${change.filename}\n${change.patch}`)
       .join('\n\n');
-    return await llmClient.generateReview(combinedDiff, commitMessages);
+    return await llmClient.generateReview(combinedDiff, commitMessages, config);
   }
 
-  /**
-   * 生成URL slug
-   */
   private slugifyUrl(url: string): string {
     return url
       .replace(/^https?:\/\//, '')
@@ -213,23 +314,14 @@ export class ReviewService {
       .replace(/^_|_$/g, '');
   }
 
-  /**
-   * 计算文件变更的添加行数
-   */
   private calculateAdditions(changes: FileChange[]): number {
     return changes.reduce((sum, change) => sum + change.additions, 0);
   }
 
-  /**
-   * 计算文件变更的删除行数
-   */
   private calculateDeletions(changes: FileChange[]): number {
     return changes.reduce((sum, change) => sum + change.deletions, 0);
   }
 
-  /**
-   * 发送审查通知
-   */
   private async sendReviewNotification(
     reviewResult: LLMReviewResult,
     projectName: string,
@@ -254,9 +346,6 @@ export class ReviewService {
     });
   }
 
-  /**
-   * 生成文件变更哈希
-   */
   private generateFilesHash(changes: FileChange[]): string {
     const changeContent = changes
       .map((change) => ({

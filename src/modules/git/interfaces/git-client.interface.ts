@@ -1,3 +1,4 @@
+
 export interface FileChange {
   filename: string;
   additions: number;
@@ -25,6 +26,8 @@ export interface PullRequestInfo {
   files: FileChange[];
   commits: CommitInfo[];
   webhookData: any;
+  isDraft?: boolean;
+  
 }
 
 export interface PushInfo {
@@ -51,8 +54,10 @@ export interface ParsedWebhookData {
   targetBranch?: string;
   branchName?: string;
   url: string;
+  state?: string;
   commits: CommitInfo[];
   webhookData: any;
+ 
 }
 
 export interface GitClientInterface {
@@ -85,13 +90,13 @@ export interface GitClientInterface {
   getPullRequestInfo(
     owner: string,
     repo: string,
-    pullNumber: number,
+    pullNumber: number
   ): Promise<PullRequestInfo>;
 
   getPushInfo(
     owner: string,
     repo: string,
-    commitSha: string,
+    commitSha: string
   ): Promise<PushInfo>;
 }
 

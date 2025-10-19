@@ -21,7 +21,12 @@ export class WebhookService {
         return { message: 'Unsupported GitLab event type' };
       }
 
-      if (parsedData.eventType === 'pull_request') {
+      if (
+        parsedData.eventType === 'pull_request' &&
+        ['opened', 'reopened', 'synchronize', 'ready_for_review'].includes(
+          parsedData.state,
+        )
+      ) {
         await this.reviewService.handlePullRequest(parsedData);
         return {
           message: 'GitLab merge request event processed asynchronously',
@@ -52,7 +57,12 @@ export class WebhookService {
         return { message: 'Unsupported GitHub event type' };
       }
 
-      if (parsedData.eventType === 'pull_request') {
+      if (
+        parsedData.eventType === 'pull_request' &&
+        ['open', 'update', 'reopen', 'unmarked_as_draft'].includes(
+          parsedData.state,
+        )
+      ) {
         await this.reviewService.handlePullRequest(parsedData);
         return {
           message: 'GitHub pull request event processed asynchronously',

@@ -6,9 +6,8 @@ import {
   GitClientInterface,
   GitClientConfig,
   PullRequestInfo,
-  PushInfo,
-  FileChange,
-} from '../interfaces/git-client.interface';
+  PushInfo, 
+} from '../interfaces/git-client.interface'; 
 
 @Injectable()
 export abstract class BaseGitClient implements GitClientInterface {
@@ -68,29 +67,17 @@ export abstract class BaseGitClient implements GitClientInterface {
     }
   }
 
-  protected filterReviewableFiles(files: FileChange[]): FileChange[] {
-    const supportedExtensions = this.configService
-      .get<string>(
-        'SUPPORTED_EXTENSIONS',
-        '.java,.py,.php,.js,.ts,.vue,.yml,.json,.md,.sql',
-      )
-      .split(',');
-
-    return files.filter((file) =>
-      supportedExtensions.some((ext) => file.filename.endsWith(ext)),
-    );
-  }
-
+ 
   abstract getPullRequestInfo(
     owner: string,
     repo: string,
-    pullNumber: number,
+    pullNumber: number, 
   ): Promise<PullRequestInfo>;
 
   abstract getPushInfo(
     owner: string,
     repo: string,
-    commitSha: string,
+    commitSha: string, 
   ): Promise<PushInfo>;
 
   abstract createPullRequestComment(

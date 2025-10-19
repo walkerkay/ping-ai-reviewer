@@ -14,7 +14,6 @@ export interface ProjectConfig {
     exclude: string[];
   };
   trigger: {
-    auto: boolean;
     events: ('pull_request' | 'push')[];
     branches: string[];
     include_draft: boolean;
@@ -24,8 +23,8 @@ export interface ProjectConfig {
     };
   };
   integrations: {
-    dingtalk?: IntegrationConfig;
-    pingcode?: IntegrationConfig;
+    dingtalk?: ProjectIntegrationConfig;
+    pingcode?: ProjectIntegrationConfig;
   };
   references?: {
     path?: string;
@@ -33,14 +32,20 @@ export interface ProjectConfig {
   }[];
 }
 
-export interface IntegrationConfig {
+export type ProjectFilesConfig = ProjectConfig['files'];
+
+export type ProjectTriggerConfig = ProjectConfig['trigger'];
+
+export type ProjectReviewConfig = ProjectConfig['review'];
+
+export interface ProjectIntegrationConfig {
   notification: {
     enabled: boolean;
-    message_template: string;
+    template?: string;
   };
   push_summary?: {
     enabled: boolean;
     summary_field: string;
-    template: string;
+    template?: string;
   };
 }

@@ -5,6 +5,7 @@ import {
   LLMConfig,
   LLMReviewResult,
 } from '../interfaces/llm-client.interface';
+import { ProjectConfig } from '../../config';
 
 @Injectable()
 export abstract class BaseLLMClient implements LLMClient {
@@ -22,6 +23,7 @@ export abstract class BaseLLMClient implements LLMClient {
   abstract generateReview(
     diff: string,
     commitMessages: string,
+    config: ProjectConfig,
   ): Promise<LLMReviewResult>;
 
   abstract generateReport(commits: any[]): Promise<string>;
