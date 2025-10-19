@@ -1,7 +1,6 @@
 import { merge } from 'lodash';
 import { ProjectConfig } from './interfaces/config.interface';
 import * as yaml from 'js-yaml';
-export * from './tools';
 export * from './interfaces/config.interface';
 
 const defaultConfig: ProjectConfig = {
