@@ -1,10 +1,10 @@
+import { merge } from 'lodash';
 import { ProjectConfig } from './interfaces/config.interface';
+import * as yaml from 'js-yaml';
+export * from './tools';
+export * from './interfaces/config.interface';
 
-export const getConfigFilePath = (ext: string = 'yaml') => {
-  return `.codereview.${ext}`;
-};
-
-export const defaultConfig: ProjectConfig = {
+const defaultConfig: ProjectConfig = {
   version: '1.0',
   review: {
     enabled: true,
@@ -26,38 +26,30 @@ export const defaultConfig: ProjectConfig = {
       '.md',
       '.sql',
     ],
-    include: ['src/**/*', 'app/**/*'],
+    include: ['**/src/**/*', 'app/**/*'],
     exclude: ['dist/**/*', 'node_modules/**/*', 'test/**/*', '**/*.min.js'],
   },
   trigger: {
-    auto: true,
     events: ['pull_request', 'push'],
     branches: ['develop'],
     include_draft: false,
     ignore_rules: {
       title_contains: ['WIP', 'Draft', 'DO NOT REVIEW'],
-      branch_matches: [
-        'feature/*',
-        'hotfix/*',
-        'release/*',
-        'master',
-        'main',
-        'develop',
-      ],
+      branch_matches: ['release/*'],
     },
   },
   integrations: {
     dingtalk: {
       notification: {
         enabled: true,
-        message_template:
+        template:
           '🚀 代码审查完成\n状态: {{ status }}\n问题数: {{ issues }}\n严重问题: {{ critical }}\n审查人: AI CodeReviewer',
       },
     },
     pingcode: {
       notification: {
         enabled: true,
-        message_template:
+        template:
           '🚀 代码审查完成\n状态: {{ status }}\n问题数: {{ issues }}\n严重问题: {{ critical }}\n审查人: AI CodeReviewer',
       },
       push_summary: {
@@ -74,3 +66,21 @@ export const defaultConfig: ProjectConfig = {
     { url: 'https://example.com/performance-checklist' },
   ],
 };
+
+export function parseConfig(yamlString: string): ProjectConfig {
+  try {
+    if (!yamlString) {
+      return defaultConfig;
+    }
+    const parsedConfig = yaml.load(yamlString) as any;
+
+    if (!parsedConfig || typeof parsedConfig !== 'object') {
+      throw new Error(`Invalid YAML format: configuration must be an object`);
+    }
+    const mergedConfig = { ...defaultConfig, ...parsedConfig };
+    return mergedConfig as ProjectConfig;
+  } catch (error) {
+    console.log(`Invalid YAML format: ${error.message}, use default config`);
+    return defaultConfig;
+  }
+}

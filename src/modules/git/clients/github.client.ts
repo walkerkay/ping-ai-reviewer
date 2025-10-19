@@ -91,8 +91,7 @@ export class GitHubClient extends BaseGitClient {
     try {
       const data = await this.makeGetRequest(url);
       const files = data || [];
-      const transformedFiles = this.transformFiles(files);
-      return this.filterReviewableFiles(transformedFiles);
+      return this.transformFiles(files);
     } catch (error) {
       console.error('Failed to get pull request files:', error.message);
       return [];
@@ -148,6 +147,7 @@ export class GitHubClient extends BaseGitClient {
       files,
       commits: this.transformCommits(commits),
       webhookData: prData,
+      isDraft: prData.draft || false,
     };
   }
 
@@ -163,8 +163,7 @@ export class GitHubClient extends BaseGitClient {
     try {
       const data = await this.makeGetRequest(url);
       const files = data.files || [];
-      const transformedFiles = this.transformFiles(files);
-      return this.filterReviewableFiles(transformedFiles);
+      return this.transformFiles(files);
     } catch (error) {
       console.error('Failed to get commit files:', error.message);
       return [];
@@ -197,7 +196,7 @@ export class GitHubClient extends BaseGitClient {
       author: commitData.author.login,
       branch: commitData.branch || 'unknown',
       url: commitData.html_url,
-      files, // 已经是过滤后的 FileChange[] 类型
+      files,
       commits: [this.transformCommit(commitData)],
       webhookData: commitData,
     };
@@ -224,6 +223,7 @@ export class GitHubClient extends BaseGitClient {
       url: pullRequest.html_url,
       commits: [], // 将在后续获取
       webhookData,
+      state: pullRequest.state,
     };
   }
 

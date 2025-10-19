@@ -87,8 +87,7 @@ export class GitLabClient extends BaseGitClient {
     try {
       const data = await this.makeGetRequest(url);
       const files = data.changes || [];
-      const transformedFiles = this.transformFiles(files);
-      return this.filterReviewableFiles(transformedFiles);
+      return this.transformFiles(files);
     } catch (error) {
       console.error('Failed to get merge request changes:', error.message);
       return [];
@@ -144,6 +143,7 @@ export class GitLabClient extends BaseGitClient {
       files,
       commits: this.transformCommits(commits),
       webhookData: mrData,
+      isDraft: false, // gitlab 没有 draft 概念
     };
   }
 
@@ -168,8 +168,7 @@ export class GitLabClient extends BaseGitClient {
     try {
       const data = await this.makeGetRequest(url);
       const files = data.files || [];
-      const transformedFiles = this.transformFiles(files);
-      return this.filterReviewableFiles(transformedFiles);
+      return this.transformFiles(files);
     } catch (error) {
       console.error('Failed to get commit files:', error.message);
       return [];
@@ -313,6 +312,7 @@ export class GitLabClient extends BaseGitClient {
       sourceBranch: objectAttributes.source_branch,
       targetBranch: objectAttributes.target_branch,
       url: objectAttributes.url,
+      state: objectAttributes.action,
       commits: [], // 将在后续获取
       webhookData,
     };

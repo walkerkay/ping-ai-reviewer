@@ -9,11 +9,11 @@ version: 1.0
 # 基础设置
 # ------------------------------------------
 review:
-  enabled: true             # 是否启用自动审查
-  language: zh              # 审查语言，可选 zh / en
-  mode: strict              # 审查模式：light / strict
-  max_review_length: 4000   # 单次审查输出最大长度（字符数）
-  max_files: 50             # 超过此文件数跳过审查
+  enabled: true # 是否启用自动审查
+  language: zh # 审查语言，可选 zh / en
+  mode: strict # 审查模式：light / strict
+  max_review_length: 4000 # 单次审查输出最大长度（字符数）
+  max_files: 50 # 超过此文件数跳过审查
   max_content_length: 20000 # 单文件最大内容长度（字符数）
 
 # ------------------------------------------
@@ -43,20 +43,19 @@ files:
 # 触发规则
 # ------------------------------------------
 trigger:
-  auto: true                 # 是否自动触发审查
-  events:                     # 触发类型（支持 pull_request / push）
+  events: # 触发类型（支持 pull_request / push）
     - pull_request
     - push
-  branches:                   # 限定触发分支
+  branches: # 限定触发分支
     - develop
-  include_draft: false        # 是否包含 Draft PR
+  include_draft: false # 是否包含 Draft PR
 
-  ignore_rules:               # 排除规则
-    title_contains:           # PR 标题包含以下内容则跳过审查
+  ignore_rules: # 排除规则
+    title_contains: # PR 标题包含以下内容则跳过审查
       - WIP
       - Draft
       - DO NOT REVIEW
-    branch_matches:           # 分支匹配以下规则则跳过审查
+    branch_matches: # 分支匹配以下规则则跳过审查
       - feature/*
       - hotfix/*
       - release/*
@@ -71,7 +70,7 @@ integrations:
   dingtalk:
     notification:
       enabled: true
-      message_template: |
+      template: |
         🚀 代码审查完成
         状态: {{ status }}
         问题数: {{ issues }}
@@ -81,14 +80,14 @@ integrations:
   pingcode:
     notification:
       enabled: true
-      message_template: |
+      template: |
         🚀 代码审查完成
         状态: {{ status }}
         问题数: {{ issues }}
         严重问题: {{ critical }}
         审查人: AI CodeReviewer
 
-    push_summary:               # 自动写入任务自定义字段
+    push_summary: # 自动写入任务自定义字段
       enabled: true
       summary_field: ai_review_summary
       template: |
@@ -105,5 +104,3 @@ references:
   - path: './docs/code-style.md'
   - url: 'https://example.com/security-guidelines'
   - url: 'https://example.com/performance-checklist'
-
- 

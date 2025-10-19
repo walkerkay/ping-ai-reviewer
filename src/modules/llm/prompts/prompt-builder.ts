@@ -6,17 +6,13 @@ import { strictPrompt } from './modes/strict';
 type PromptMessage = { role: 'system' | 'user'; content: string };
 
 export class PromptBuilder {
-  static buildReviewPrompt(
-    payload: {
-      language: string;
-      mode: 'light' | 'strict';
-      diff?: string;
-      commitMessages?: string;
-    } = {
-      language: '中文',
-      mode: 'light',
-    },
-  ): PromptMessage[] {
+  static buildReviewPrompt(payload: {
+    diff?: string;
+    commitMessages?: string;
+    language: 'zh' | 'en';
+    mode: 'light' | 'strict';
+    max_review_length: number;
+  }): PromptMessage[] {
     const promptMessages = [{ role: 'system', content: systemPrompt() }];
 
     if (payload.mode === 'strict') {
@@ -39,7 +35,7 @@ export class PromptBuilder {
 
     promptMessages.push({
       role: 'user',
-      content: outroPrompt(payload.language),
+      content: outroPrompt(payload.language, payload.max_review_length),
     });
 
     return promptMessages as PromptMessage[];

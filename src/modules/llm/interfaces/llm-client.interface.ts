@@ -1,11 +1,12 @@
 import { outputExample } from '../prompts/base/outro';
+import { ProjectConfig } from '../../config';
 
 export type LLMReviewResult = typeof outputExample;
 
 export interface LLMClient {
-  generateReview(diff: string, commitMessages: string): Promise<LLMReviewResult>;
+  generateReview(diff: string, commitMessages: string, config: ProjectConfig): Promise<LLMReviewResult>;
   generateReport(commits: any[]): Promise<string>;
-}
+} 
 
 export interface LLMConfig {
   apiKey: string;

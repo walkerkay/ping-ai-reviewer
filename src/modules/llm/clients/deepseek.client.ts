@@ -5,6 +5,7 @@ import { firstValueFrom } from 'rxjs';
 import { BaseLLMClient } from './base-llm.client';
 import { LLMConfig, LLMReviewResult } from '../interfaces/llm-client.interface';
 import { PromptBuilder } from '../prompts/prompt-builder';
+import { ProjectConfig } from '@/modules/config';
 
 @Injectable()
 export class DeepSeekClient extends BaseLLMClient {
@@ -28,10 +29,12 @@ export class DeepSeekClient extends BaseLLMClient {
   async generateReview(
     diff: string,
     commitMessages: string,
+    config: ProjectConfig,
   ): Promise<LLMReviewResult> {
     const promptMessages = PromptBuilder.buildReviewPrompt({
-      language: '中文',
-      mode: 'light',
+      language: config.review.language,
+      mode: config.review.mode,
+      max_review_length: config.review.max_review_length,
       diff,
       commitMessages,
     });
