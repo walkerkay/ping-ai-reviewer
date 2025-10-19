@@ -11,8 +11,9 @@ import {
 } from '../git/interfaces/git-client.interface';
 import { GitFactory } from '../git/git.factory';
 import { LLMReviewResult } from '../llm/interfaces/llm-client.interface';
-import { ProjectConfig } from '../config/interfaces/config.interface';
-import { parseConfig } from '../config';
+import { ProjectConfig } from '../core/config/interfaces/config.interface';
+import { parseConfig } from '../core/config';
+import { logger } from '../core/logger';
 import {
   filterReviewableFiles,
   shouldTriggerReview,
@@ -82,7 +83,7 @@ export class ReviewService {
         );
 
       if (hasExistingReview) {
-        console.log('Files have not changed, skipping review generation');
+        logger.info('Files have not changed, skipping review generation', 'ReviewService');
         return;
       }
 
@@ -134,7 +135,7 @@ export class ReviewService {
         pullRequestInfo,
       );
     } catch (error) {
-      console.error('Pull request review failed:', error.message);
+      logger.error('Pull request review failed:', 'ReviewService', error.message);
     }
   }
 
@@ -144,7 +145,7 @@ export class ReviewService {
         this.configService.get<string>('PUSH_REVIEW_ENABLED') === '1';
 
       if (!pushReviewEnabled) {
-        console.log('Push review is disabled');
+        logger.info('Push review is disabled', 'ReviewService');
         return;
       }
 
@@ -169,7 +170,7 @@ export class ReviewService {
       );
 
       if (!shouldTrigger) {
-        console.log('Review trigger check failed, skipping review');
+        logger.info('Review trigger check failed, skipping review', 'ReviewService');
         return;
       }
       const lastCommit = parsedData.commits[parsedData.commits.length - 1];
@@ -238,7 +239,7 @@ export class ReviewService {
         null,
       );
     } catch (error) {
-      console.error('Push review failed:', error.message);
+      logger.error('Push review failed:', 'ReviewService', error.message);
     }
   }
 

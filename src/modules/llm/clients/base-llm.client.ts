@@ -5,7 +5,7 @@ import {
   LLMConfig,
   LLMReviewResult,
 } from '../interfaces/llm-client.interface';
-import { ProjectConfig } from '../../config';
+import { ProjectConfig } from '../../core/config';
 
 @Injectable()
 export abstract class BaseLLMClient implements LLMClient {

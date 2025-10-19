@@ -4,8 +4,9 @@ import {
   ProjectTriggerConfig,
   ProjectReviewConfig,
   ProjectConfig,
-} from '../config/interfaces/config.interface';
+} from '../core/config/interfaces/config.interface';
 import { FileChange } from '../git/interfaces/git-client.interface';
+import { logger } from '../core/logger';
 import * as crypto from 'crypto';
 
 /**
@@ -121,8 +122,9 @@ export function checkReviewLimits<
   T extends { filename: string; patch?: string },
 >(files: T[], config: ProjectReviewConfig): boolean {
   if (files.length > config.max_files) {
-    console.log(
+    logger.warn(
       `File count (${files.length}) exceeds limit (${config.max_files})`,
+      'ReviewUtils'
     );
     return true;
   }
@@ -147,11 +149,11 @@ export async function shouldSkipReview(
   },
 ): Promise<boolean> {
   if (params.files.length === 0) {
-    console.log('No supported file changes found');
+    logger.info('No supported file changes found', 'ReviewUtils');
     return true;
   }
   if (checkReviewLimits(params.files, config.review)) {
-    console.log('File count or size exceeds limit');
+    logger.warn('File count or size exceeds limit', 'ReviewUtils');
     return true;
   }
 
@@ -164,7 +166,7 @@ export async function shouldSkipReview(
   );
 
   if (!shouldTrigger) {
-    console.log('Review trigger check failed, skipping review');
+    logger.info('Review trigger check failed, skipping review', 'ReviewUtils');
     return true;
   }
 
