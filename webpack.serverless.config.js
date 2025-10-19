@@ -1,4 +1,5 @@
 const path = require('path');
+const webpack = require('webpack');
 
 module.exports = {
   mode: 'production',
@@ -19,7 +20,6 @@ module.exports = {
             configFile: path.resolve(__dirname, 'tsconfig.json'),
           },
         },
-        exclude: /node_modules/,
       },
     ],
   },
@@ -31,6 +31,12 @@ module.exports = {
     // 排除不需要打包的模块
     'aws-sdk': 'aws-sdk',
   },
+  plugins: [
+    // 忽略所有 .d.ts 文件
+    new webpack.IgnorePlugin({
+      resourceRegExp: /\.d\.ts$/,
+    }),
+  ],
   stats: {
     errorDetails: true,
   },
