@@ -5,7 +5,7 @@ import { firstValueFrom } from 'rxjs';
 import { BaseLLMClient } from './base-llm.client';
 import { LLMConfig, LLMReviewResult } from '../interfaces/llm-client.interface';
 import { PromptBuilder } from '../prompts/prompt-builder';
-import { ProjectConfig } from '@/modules/config';
+import { ProjectConfig } from '@/modules/core/config';
 
 @Injectable()
 export class DeepSeekClient extends BaseLLMClient {

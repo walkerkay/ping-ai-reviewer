@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { logger } from '../../core/logger';
 import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
@@ -39,7 +40,7 @@ export class DingTalkNotifier implements Notifier {
 
       return response.data.errcode === 0;
     } catch (error) {
-      console.error('DingTalk notification failed:', error.message);
+      logger.error('DingTalk notification failed:', 'DingTalkNotifier', error.message);
       return false;
     }
   }

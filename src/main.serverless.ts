@@ -1,6 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
+import { logger } from './modules/core/logger';
 
 let app: any;
 
@@ -35,7 +36,7 @@ const handler = async (req: any, res: any) => {
     // 设置请求和响应对象
     server(req, res);
   } catch (error) {
-    console.error('Error in serverless handler:', error);
+    logger.error('Error in serverless handler:', 'ServerlessHandler', error);
     res.status(500).json({ error: 'Internal Server Error' });
   }
 };

@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { GitFactory } from '../git/git.factory';
 import { GitClientType } from '../git/interfaces/git-client.interface';
 import { ReviewService } from '../review/review.service';
+import { logger } from '../core/logger';
 
 @Injectable()
 export class WebhookService {
@@ -38,7 +39,7 @@ export class WebhookService {
 
       return { message: 'GitLab event processed' };
     } catch (error) {
-      console.error('GitLab webhook processing failed:', error.message);
+      logger.error('GitLab webhook processing failed:', 'WebhookService', error.message);
       return { message: 'GitLab webhook processing failed' };
     }
   }
@@ -74,7 +75,7 @@ export class WebhookService {
 
       return { message: 'GitHub event processed' };
     } catch (error) {
-      console.error('GitHub webhook processing failed:', error.message);
+      logger.error('GitHub webhook processing failed:', 'WebhookService', error.message);
       return { message: 'GitHub webhook processing failed' };
     }
   }

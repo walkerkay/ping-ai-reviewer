@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { DatabaseService } from '../database/database.service';
 import { LLMFactory } from '../llm/llm.factory';
 import { NotificationService } from '../notification/notification.service';
+import { logger } from '../core/logger';
 
 @Injectable()
 export class ReportService {
@@ -39,7 +40,7 @@ export class ReportService {
       }
 
       if (commits.length === 0) {
-        console.log('No data to process for daily report');
+        logger.info('No data to process for daily report', 'ReportService');
         return;
       }
 
@@ -59,9 +60,9 @@ export class ReportService {
         msgType: 'markdown',
       });
 
-      console.log('Daily report generated and sent successfully');
+      logger.info('Daily report generated and sent successfully', 'ReportService');
     } catch (error) {
-      console.error('Failed to generate daily report:', error.message);
+      logger.error('Failed to generate daily report:', 'ReportService', error.message);
     }
   }
 
@@ -101,7 +102,7 @@ export class ReportService {
       // 生成报告
       return await this.generateReportContent(sortedCommits);
     } catch (error) {
-      console.error('Failed to generate manual report:', error.message);
+      logger.error('Failed to generate manual report:', 'ReportService', error.message);
       return 'Failed to generate report';
     }
   }

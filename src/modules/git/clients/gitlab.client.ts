@@ -11,6 +11,7 @@ import {
 } from '../interfaces/git-client.interface';
 import { GitLabWebhookDto } from '../../webhook/dto/webhook.dto';
 import { Gitlab } from '@gitbeaker/rest';
+import { logger } from '../../core/logger';
 
 @Injectable()
 export class GitLabClient extends BaseGitClient {
@@ -88,7 +89,7 @@ export class GitLabClient extends BaseGitClient {
       const files = changes.changes || [];
       return this.transformFiles(files as any[]);
     } catch (error) {
-      console.error('Failed to get merge request changes:', error.message);
+      logger.error('Failed to get merge request changes:', 'GitLabClient', error.message);
       return [];
     }
   }
@@ -104,7 +105,7 @@ export class GitLabClient extends BaseGitClient {
       );
       return commits || [];
     } catch (error) {
-      console.error('Failed to get merge request commits:', error.message);
+      logger.error('Failed to get merge request commits:', 'GitLabClient', error.message);
       return [];
     }
   }
@@ -120,7 +121,7 @@ export class GitLabClient extends BaseGitClient {
       );
       return mergeRequest;
     } catch (error) {
-      console.error('Failed to get merge request data:', error.message);
+      logger.error('Failed to get merge request data:', 'GitLabClient', error.message);
       throw error;
     }
   }
@@ -162,7 +163,7 @@ export class GitLabClient extends BaseGitClient {
       const commit = await this.gitlab.Commits.show(projectId, commitSha);
       return commit;
     } catch (error) {
-      console.error('Failed to get commit data:', error.message);
+      logger.error('Failed to get commit data:', 'GitLabClient', error.message);
       throw error;
     }
   }
@@ -175,7 +176,7 @@ export class GitLabClient extends BaseGitClient {
       const changes = await this.gitlab.Commits.showDiff(projectId, commitSha);
       return this.transformFiles(changes);
     } catch (error) {
-      console.error('Failed to get commit files:', error.message);
+      logger.error('Failed to get commit files:', 'GitLabClient', error.message);
       return [];
     }
   }
@@ -215,7 +216,7 @@ export class GitLabClient extends BaseGitClient {
       await this.gitlab.MergeRequestNotes.create(projectId, pullNumber, body);
       return true;
     } catch (error) {
-      console.error('Failed to add merge request note:', error.message);
+      logger.error('Failed to add merge request note:', 'GitLabClient', error.message);
       return false;
     }
   }
@@ -232,7 +233,7 @@ export class GitLabClient extends BaseGitClient {
       await this.gitlab.Commits.createComment(projectId, commitSha, body);
       return true;
     } catch (error) {
-      console.error('Failed to add commit comment:', error.message);
+      logger.error('Failed to add commit comment:', 'GitLabClient', error.message);
       return false;
     }
   }
@@ -250,7 +251,7 @@ export class GitLabClient extends BaseGitClient {
       );
       return content;
     } catch (error) {
-      console.error('Failed to get content:', error.message);
+      logger.error('Failed to get content:', 'GitLabClient', error.message);
       return null;
     }
   }
@@ -276,7 +277,7 @@ export class GitLabClient extends BaseGitClient {
       );
       return decodedContent;
     } catch (error) {
-      console.error('Failed to get content as text:', error.message);
+      logger.error('Failed to get content as text:', 'GitLabClient', error.message);
       return null;
     }
   }

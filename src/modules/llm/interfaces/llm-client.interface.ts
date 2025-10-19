@@ -1,5 +1,5 @@
 import { outputExample } from '../prompts/base/outro';
-import { ProjectConfig } from '../../config';
+import { ProjectConfig } from '../../core/config';
 
 export type LLMReviewResult = typeof outputExample;
 

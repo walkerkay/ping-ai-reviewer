@@ -4,6 +4,7 @@ import { DingTalkNotifier } from './notifiers/dingtalk.notifier';
 import { WeComNotifier } from './notifiers/wecom.notifier';
 import { FeishuNotifier } from './notifiers/feishu.notifier';
 import { PingCodeNotifier } from './notifiers/pingcode.notifier';
+import { logger } from '../core/logger';
 
 @Injectable()
 export class NotificationService {
@@ -34,14 +35,14 @@ export class NotificationService {
     }
 
     if (promises.length === 0) {
-      console.log('No notification channels enabled');
+      logger.info('No notification channels enabled', 'NotificationService');
       return;
     }
 
     try {
       await Promise.allSettled(promises);
     } catch (error) {
-      console.error('Notification sending failed:', error.message);
+      logger.error('Notification sending failed:', 'NotificationService', error.message);
     }
   }
 }

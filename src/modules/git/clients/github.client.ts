@@ -11,6 +11,7 @@ import {
 } from '../interfaces/git-client.interface';
 import { GitHubWebhookDto } from '../../webhook/dto/webhook.dto';
 import { Octokit } from '@octokit/rest';
+import { logger } from '../../core/logger';
 
 @Injectable()
 export class GitHubClient extends BaseGitClient {
@@ -93,7 +94,7 @@ export class GitHubClient extends BaseGitClient {
       });
       return this.transformFiles(files || []);
     } catch (error) {
-      console.error('Failed to get pull request files:', error.message);
+      logger.error('Failed to get pull request files:', 'GitHubClient', error.message);
       return [];
     }
   }
@@ -111,7 +112,7 @@ export class GitHubClient extends BaseGitClient {
       });
       return commits || [];
     } catch (error) {
-      console.error('Failed to get pull request commits:', error.message);
+      logger.error('Failed to get pull request commits:', 'GitHubClient', error.message);
       return [];
     }
   }
@@ -129,7 +130,7 @@ export class GitHubClient extends BaseGitClient {
       });
       return prData;
     } catch (error) {
-      console.error('Failed to get pull request data:', error.message);
+      logger.error('Failed to get pull request data:', 'GitHubClient', error.message);
       throw error;
     }
   }
@@ -174,7 +175,7 @@ export class GitHubClient extends BaseGitClient {
       const files = commitData.files || [];
       return this.transformFiles(files);
     } catch (error) {
-      console.error('Failed to get commit files:', error.message);
+      logger.error('Failed to get commit files:', 'GitHubClient', error.message);
       return [];
     }
   }
@@ -192,7 +193,7 @@ export class GitHubClient extends BaseGitClient {
       });
       return commitData;
     } catch (error) {
-      console.error('Failed to get commit data:', error.message);
+      logger.error('Failed to get commit data:', 'GitHubClient', error.message);
       throw error;
     }
   }
@@ -301,7 +302,7 @@ export class GitHubClient extends BaseGitClient {
       });
       return true;
     } catch (error) {
-      console.error('Failed to create pull request comment:', error.message);
+      logger.error('Failed to create pull request comment:', 'GitHubClient', error.message);
       return false;
     }
   }
@@ -321,7 +322,7 @@ export class GitHubClient extends BaseGitClient {
       });
       return true;
     } catch (error) {
-      console.error('Failed to create commit comment:', error.message);
+      logger.error('Failed to create commit comment:', 'GitHubClient', error.message);
       return false;
     }
   }
@@ -341,7 +342,7 @@ export class GitHubClient extends BaseGitClient {
       });
       return content;
     } catch (error) {
-      console.error('Failed to get content:', error.message);
+      logger.error('Failed to get content:', 'GitHubClient', error.message);
       return null;
     }
   }
@@ -364,7 +365,7 @@ export class GitHubClient extends BaseGitClient {
       );
       return decodedContent;
     } catch (error) {
-      console.error('Failed to get content as text:', error.message);
+      logger.error('Failed to get content as text:', 'GitHubClient', error.message);
       return null;
     }
   }

@@ -1,6 +1,7 @@
 import { merge } from 'lodash';
 import { ProjectConfig } from './interfaces/config.interface';
 import * as yaml from 'js-yaml';
+import { logger } from '../logger';
 export * from './interfaces/config.interface';
 
 const defaultConfig: ProjectConfig = {
@@ -79,7 +80,7 @@ export function parseConfig(yamlString: string): ProjectConfig {
     const mergedConfig = { ...defaultConfig, ...parsedConfig };
     return mergedConfig as ProjectConfig;
   } catch (error) {
-    console.log(`Invalid YAML format: ${error.message}, use default config`);
+    logger.warn(`Invalid YAML format: ${error.message}, use default config`, 'ConfigParser');
     return defaultConfig;
   }
 }

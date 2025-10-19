@@ -6,6 +6,7 @@ import {
   Notifier,
   NotificationMessage,
 } from '../interfaces/notifier.interface';
+import { logger } from '../../core/logger';
 
 @Injectable()
 export class PingCodeNotifier implements Notifier {
@@ -43,7 +44,7 @@ export class PingCodeNotifier implements Notifier {
       // 确保有有效的访问令牌
       const token = await this.getValidAccessToken();
       if (!token) {
-        console.error('Failed to obtain valid access token');
+        logger.error('Failed to obtain valid access token', 'PingCodeNotifier');
         return false;
       }
 
@@ -56,7 +57,7 @@ export class PingCodeNotifier implements Notifier {
       );
 
       if (!workItemIdentifier) {
-        console.log('No work item identifier found in message content');
+        logger.info('No work item identifier found in message content', 'PingCodeNotifier');
         return false;
       }
 
@@ -64,8 +65,9 @@ export class PingCodeNotifier implements Notifier {
       const workItemId = await this.getWorkItemId(workItemIdentifier, token);
 
       if (!workItemId) {
-        console.log(
+        logger.info(
           `Work item not found for identifier: ${workItemIdentifier}`,
+          'PingCodeNotifier',
         );
         return false;
       }
@@ -90,7 +92,7 @@ export class PingCodeNotifier implements Notifier {
 
       return response.status === 200 || response.status === 201;
     } catch (error) {
-      console.error('PingCode notification failed:', error.message);
+      logger.error('PingCode notification failed:', 'PingCodeNotifier', error.message);
       return false;
     }
   }
@@ -145,13 +147,13 @@ export class PingCodeNotifier implements Notifier {
           Math.floor(Date.now() / 1000) +
           (response.data.expires_in || 3600) -
           3600;
-        console.log('PingCode access token refreshed successfully');
+        logger.info('PingCode access token refreshed successfully', 'PingCodeNotifier');
         return this.accessToken;
       }
 
       return null;
     } catch (error) {
-      console.error('Failed to refresh PingCode access token:', error.message);
+      logger.error('Failed to refresh PingCode access token:', 'PingCodeNotifier', error.message);
       return null;
     }
   }

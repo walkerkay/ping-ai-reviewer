@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { logger } from '../../core/logger';
 import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
@@ -39,7 +40,7 @@ export class FeishuNotifier implements Notifier {
 
       return response.data.code === 0;
     } catch (error) {
-      console.error('Feishu notification failed:', error.message);
+      logger.error('Feishu notification failed:', 'FeishuNotifier', error.message);
       return false;
     }
   }
