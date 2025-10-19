@@ -10,25 +10,26 @@ import {
   ParsedWebhookData,
 } from '../interfaces/git-client.interface';
 import { GitLabWebhookDto } from '../../webhook/dto/webhook.dto';
+import { Gitlab } from '@gitbeaker/rest';
 
 @Injectable()
 export class GitLabClient extends BaseGitClient {
+  private gitlab: InstanceType<typeof Gitlab>;
+
   protected initializeConfig(): GitClientConfig {
-    return {
+    const config = {
       token: this.configService.get<string>('GITLAB_ACCESS_TOKEN'),
       url: this.configService.get<string>('GITLAB_URL', 'https://gitlab.com'),
       type: GitClientType.GITLAB,
     };
-  }
 
-  protected getAuthHeaders(): Record<string, string> {
-    return {
-      'Private-Token': this.config.token,
-    };
-  }
+    // 初始化 GitLab SDK 实例
+    this.gitlab = new Gitlab({
+      token: config.token,
+      host: config.url,
+    });
 
-  protected getApiBaseUrl(): string {
-    return `${this.config.url}/api/v4`;
+    return config;
   }
 
   private transformCommits(commits: any[]): CommitInfo[] {
@@ -65,8 +66,8 @@ export class GitLabClient extends BaseGitClient {
   private transformFiles(files: any[]): FileChange[] {
     return files.map((file) => ({
       filename: file.new_path || file.old_path || file.path,
-      additions: this.countAdditions(file.diff || ''),
-      deletions: this.countDeletions(file.diff || ''),
+      additions: file.additions ?? this.countAdditions(file.diff || ''),
+      deletions: file.deletions ?? this.countDeletions(file.diff || ''),
       changes:
         this.countAdditions(file.diff || '') +
         this.countDeletions(file.diff || ''),
@@ -79,15 +80,13 @@ export class GitLabClient extends BaseGitClient {
     projectId: string,
     mergeRequestIid: number,
   ): Promise<FileChange[]> {
-    // GitLab 使用项目 ID 和 Merge Request IID
-    const url = this.buildApiUrl(
-      `/projects/${projectId}/merge_requests/${mergeRequestIid}/changes?access_raw_diffs=true`,
-    );
-
     try {
-      const data = await this.makeGetRequest(url);
-      const files = data.changes || [];
-      return this.transformFiles(files);
+      const changes = await this.gitlab.MergeRequests.showChanges(
+        projectId,
+        mergeRequestIid,
+      );
+      const files = changes.changes || [];
+      return this.transformFiles(files as any[]);
     } catch (error) {
       console.error('Failed to get merge request changes:', error.message);
       return [];
@@ -98,13 +97,12 @@ export class GitLabClient extends BaseGitClient {
     projectId: string,
     mergeRequestIid: number,
   ): Promise<any[]> {
-    const url = this.buildApiUrl(
-      `/projects/${projectId}/merge_requests/${mergeRequestIid}/commits`,
-    );
-
     try {
-      const data = await this.makeGetRequest(url);
-      return data || [];
+      const commits = await this.gitlab.MergeRequests.allCommits(
+        projectId,
+        mergeRequestIid,
+      );
+      return commits || [];
     } catch (error) {
       console.error('Failed to get merge request commits:', error.message);
       return [];
@@ -115,17 +113,26 @@ export class GitLabClient extends BaseGitClient {
     projectId: string,
     mergeRequestIid: number,
   ): Promise<any> {
-    const url = this.buildApiUrl(
-      `/projects/${projectId}/merge_requests/${mergeRequestIid}`,
-    );
-    return await this.makeGetRequest(url);
+    try {
+      const mergeRequest = await this.gitlab.MergeRequests.show(
+        projectId,
+        mergeRequestIid,
+      );
+      return mergeRequest;
+    } catch (error) {
+      console.error('Failed to get merge request data:', error.message);
+      throw error;
+    }
   }
 
   async getPullRequestInfo(
     owner: string,
-    projectId: string,
-    mergeRequestIid: number,
+    repo: string,
+    pullNumber: number,
   ): Promise<PullRequestInfo> {
+    // GitLab 使用 projectId 作为 repo 参数
+    const projectId = repo;
+    const mergeRequestIid = pullNumber;
     const [mrData, files, commits] = await Promise.all([
       this.getMergeRequestData(projectId, mergeRequestIid),
       this.getMergeRequestFiles(projectId, mergeRequestIid),
@@ -151,24 +158,22 @@ export class GitLabClient extends BaseGitClient {
     projectId: string,
     commitSha: string,
   ): Promise<any> {
-    const url = this.buildApiUrl(
-      `/projects/${projectId}/projectIdsitory/commits/${commitSha}`,
-    );
-    return await this.makeGetRequest(url);
+    try {
+      const commit = await this.gitlab.Commits.show(projectId, commitSha);
+      return commit;
+    } catch (error) {
+      console.error('Failed to get commit data:', error.message);
+      throw error;
+    }
   }
 
   private async getCommitFiles(
     projectId: string,
     commitSha: string,
   ): Promise<FileChange[]> {
-    const url = this.buildApiUrl(
-      `/projects/${projectId}/projectIdsitory/commits/${commitSha}`,
-    );
-
     try {
-      const data = await this.makeGetRequest(url);
-      const files = data.files || [];
-      return this.transformFiles(files);
+      const changes = await this.gitlab.Commits.showDiff(projectId, commitSha);
+      return this.transformFiles(changes);
     } catch (error) {
       console.error('Failed to get commit files:', error.message);
       return [];
@@ -177,9 +182,11 @@ export class GitLabClient extends BaseGitClient {
 
   async getPushInfo(
     owner: string,
-    projectId: string,
+    repo: string,
     commitSha: string,
   ): Promise<PushInfo> {
+    // GitLab 使用 projectId 作为 repo 参数
+    const projectId = repo;
     const [commitData, files] = await Promise.all([
       this.getCommitData(projectId, commitSha),
       this.getCommitFiles(projectId, commitSha),
@@ -198,16 +205,14 @@ export class GitLabClient extends BaseGitClient {
 
   async createPullRequestComment(
     owner: string,
-    projectId: string,
+    repo: string,
     pullNumber: number,
     body: string,
   ): Promise<boolean> {
-    const url = this.buildApiUrl(
-      `/projects/${projectId}/merge_requests/${pullNumber}/notes`,
-    );
-
+    // GitLab 使用 projectId 作为 repo 参数
+    const projectId = repo;
     try {
-      await this.makePostRequest(url, { body });
+      await this.gitlab.MergeRequestNotes.create(projectId, pullNumber, body);
       return true;
     } catch (error) {
       console.error('Failed to add merge request note:', error.message);
@@ -217,16 +222,14 @@ export class GitLabClient extends BaseGitClient {
 
   async createCommitComment(
     owner: string,
-    projectId: string,
+    repo: string,
     commitSha: string,
     body: string,
   ): Promise<boolean> {
-    const url = this.buildApiUrl(
-      `/projects/${projectId}/projectIdsitory/commits/${commitSha}/comments`,
-    );
-
+    // GitLab 使用 projectId 作为 repo 参数
+    const projectId = repo;
     try {
-      await this.makePostRequest(url, { note: body });
+      await this.gitlab.Commits.createComment(projectId, commitSha, body);
       return true;
     } catch (error) {
       console.error('Failed to add commit comment:', error.message);
@@ -239,13 +242,13 @@ export class GitLabClient extends BaseGitClient {
     path: string,
     ref: string = 'main',
   ): Promise<any> {
-    const url = this.buildApiUrl(
-      `/projects/${projectId}/projectIdsitory/files/${encodeURIComponent(path)}`,
-    );
-
     try {
-      const data = await this.makeGetRequest(url, { ref });
-      return data;
+      const content = await this.gitlab.RepositoryFiles.show(
+        projectId,
+        path,
+        ref,
+      );
+      return content;
     } catch (error) {
       console.error('Failed to get content:', error.message);
       return null;
@@ -254,10 +257,12 @@ export class GitLabClient extends BaseGitClient {
 
   async getContentAsText(
     owner: string,
-    projectId: string,
+    repo: string,
     path: string,
     ref: string = 'main',
   ): Promise<string | null> {
+    // GitLab 使用 projectId 作为 repo 参数
+    const projectId = repo;
     try {
       const content = await this.getContent(projectId, path, ref);
 

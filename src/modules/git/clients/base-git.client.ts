@@ -1,7 +1,5 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { HttpService } from '@nestjs/axios';
-import { firstValueFrom } from 'rxjs';
 import {
   GitClientInterface,
   GitClientConfig,
@@ -15,57 +13,11 @@ export abstract class BaseGitClient implements GitClientInterface {
 
   constructor(
     protected configService: ConfigService,
-    protected httpService: HttpService,
   ) {
     this.config = this.initializeConfig();
   }
 
   protected abstract initializeConfig(): GitClientConfig;
-
-  protected abstract getAuthHeaders(): Record<string, string>;
-
-  protected abstract getApiBaseUrl(): string;
-
-  protected buildApiUrl(endpoint: string): string {
-    return `${this.getApiBaseUrl()}${endpoint}`;
-  }
-
-  protected async makeGetRequest(
-    url: string,
-    params?: Record<string, any>,
-  ): Promise<any> {
-    try {
-      const response = await firstValueFrom(
-        this.httpService.get(url, {
-          headers: this.getAuthHeaders(),
-          params,
-        }),
-      );
-      return response.data;
-    } catch (error) {
-      console.error(`Failed to make GET request to ${url}:`, error.message);
-      console.error('Error details:', error.response?.data || error);
-      throw error;
-    }
-  }
-
-  protected async makePostRequest(url: string, data: any): Promise<any> {
-    try {
-      const response = await firstValueFrom(
-        this.httpService.post(url, data, {
-          headers: {
-            ...this.getAuthHeaders(),
-            'Content-Type': 'application/json',
-          },
-        }),
-      );
-      return response.data;
-    } catch (error) {
-      console.error(`Failed to make POST request to ${url}:`, error.message);
-      console.error('Error details:', error.response?.data || error);
-      throw error;
-    }
-  }
 
  
   abstract getPullRequestInfo(
