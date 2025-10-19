@@ -81,6 +81,7 @@ export class DatabaseService {
     targetBranch: string,
     filesHash: string,
   ): Promise<boolean> {
+    return false;  // 暂时禁用用于测试
     const count = await this.mergeRequestReviewModel
       .countDocuments({
         projectName,
