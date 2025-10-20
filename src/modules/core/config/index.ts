@@ -26,8 +26,14 @@ const defaultConfig: ProjectConfig = {
       '.md',
       '.sql',
     ],
-    include: ['**/src/**/*', 'app/**/*'],
-    exclude: ['dist/**/*', 'node_modules/**/*', 'test/**/*', '**/*.min.js'],
+    include: ['**/*'],
+    exclude: [
+      'dist/**/*',
+      'node_modules/**/*',
+      'test/**/*',
+      '**/*.min.js',
+      '**/*.min.css',
+    ],
   },
   trigger: {
     events: ['pull_request', 'push'],
@@ -80,7 +86,10 @@ export function parseConfig(yamlString: string): ProjectConfig {
     const mergedConfig = { ...defaultConfig, ...parsedConfig };
     return mergedConfig as ProjectConfig;
   } catch (error) {
-    logger.warn(`Invalid YAML format: ${error.message}, use default config`, 'ConfigParser');
+    logger.warn(
+      `Invalid YAML format: ${error.message}, use default config`,
+      'ConfigParser',
+    );
     return defaultConfig;
   }
 }
