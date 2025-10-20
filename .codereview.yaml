@@ -27,8 +27,8 @@ trigger:
       - release/*
 integrations:
   pingcode:
+    enabled: true
     notification:
-      enabled: true
       template: |
         🚀 代码审查完成
         状态: {{ status }}
@@ -37,7 +37,6 @@ integrations:
         审查人: AI CodeReviewer
 
     push_summary: # 自动写入任务自定义字段
-      enabled: true
       summary_field: ai_review_summary
       template: |
         🚀 代码审查完成

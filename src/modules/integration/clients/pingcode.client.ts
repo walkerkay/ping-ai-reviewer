@@ -2,72 +2,63 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
-import {
-  Notifier,
-  NotificationMessage,
-} from '../interfaces/notifier.interface';
+import { NotificationMessage } from '../interfaces/integration-client.interface';
 import { logger } from '../../core/logger';
+import { BaseIntegrationClient } from './base-client';
+import {
+  ProjectIntegrationConfig,
+} from '../../core/config';
 
 @Injectable()
-export class PingCodeNotifier implements Notifier {
-  private apiUrl: string;
-  private clientId: string;
-  private clientSecret: string;
-  private enabled: boolean;
+export class PingCodeClient extends BaseIntegrationClient<ProjectIntegrationConfig> {
   private accessToken: string | null = null;
-  private tokenExpiresAt: number = 0;
+
+  private apiUrl: string;
+
+  private clientId: string;
+
+  private clientSecret: string;
 
   constructor(
-    private configService: ConfigService,
-    private httpService: HttpService,
+    configService: ConfigService,
+    httpService: HttpService,
+    config: ProjectIntegrationConfig,
   ) {
-    this.enabled = this.configService.get<string>('PINGCODE_ENABLED') === '1';
-    this.apiUrl = this.configService.get<string>('PINGCODE_API_URL');
-    this.clientId = this.configService.get<string>('PINGCODE_CLIENT_ID');
-    this.clientSecret = this.configService.get<string>(
-      'PINGCODE_CLIENT_SECRET',
-    );
+    super(configService, httpService, config);
+    this.apiUrl =
+      configService.get('PINGCODE_API') ?? 'https://open.pingcode.com';
+    this.clientId = configService.get('PINGCODE_CLIENT_ID');
+    this.clientSecret = configService.get('PINGCODE_CLIENT_SECRET');
   }
 
-  isEnabled(): boolean {
-    return (
-      this.enabled && !!this.apiUrl && !!this.clientId && !!this.clientSecret
-    );
+  validateConfig(): boolean {
+    return !!this.apiUrl && !!this.clientId && !!this.clientSecret;
   }
 
   async sendNotification(message: NotificationMessage): Promise<boolean> {
-    if (!this.isEnabled()) {
-      return false;
-    }
-
     try {
-      // 确保有有效的访问令牌
-      const token = await this.getValidAccessToken();
-      if (!token) {
-        logger.error('Failed to obtain valid access token', 'PingCodeNotifier');
-        return false;
-      }
+      const token = await this.getAccessToken();
 
-      // 创建评论内容
-      const commentContent = this.buildCommentContent(message);
+      const formatedMessage = this.formatMessage(message);
 
-      // 从消息内容中提取工作项标识符
-      const workItemIdentifier = this.extractWorkItemIdentifier(
+      const workItemIdentifier = this.extractIdentifier(
         message.additions?.pullRequest?.title,
       );
 
       if (!workItemIdentifier) {
-        logger.info('No work item identifier found in message content', 'PingCodeNotifier');
+        logger.info(
+          'No work item identifier found in message content',
+          'PingCodeClient',
+        );
         return false;
       }
 
-      // 获取工作项 ID
       const workItemId = await this.getWorkItemId(workItemIdentifier, token);
 
       if (!workItemId) {
         logger.info(
           `Work item not found for identifier: ${workItemIdentifier}`,
-          'PingCodeNotifier',
+          'PingCodeClient',
         );
         return false;
       }
@@ -77,7 +68,7 @@ export class PingCodeNotifier implements Notifier {
         this.httpService.post(
           `${this.apiUrl}/v1/comments`,
           {
-            content: commentContent,
+            content: formatedMessage,
             principal_type: 'work_item',
             principal_id: workItemId,
           },
@@ -92,12 +83,16 @@ export class PingCodeNotifier implements Notifier {
 
       return response.status === 200 || response.status === 201;
     } catch (error) {
-      logger.error('PingCode notification failed:', 'PingCodeNotifier', error.message);
+      logger.error(
+        'PingCode notification failed:',
+        'PingCodeClient',
+        error.message,
+      );
       return false;
     }
   }
 
-  private buildCommentContent(message: NotificationMessage): string {
+  private formatMessage(message: NotificationMessage): string {
     let content = '';
 
     if (message.additions?.pullRequest?.title) {
@@ -108,24 +103,19 @@ export class PingCodeNotifier implements Notifier {
     return content;
   }
 
-  private extractWorkItemIdentifier(content: string): string | null {
-    // 尝试从内容中提取工作项标识符，例如 #xxx-01 格式
-    const workItemMatch = content.match(/#([a-zA-Z0-9]+-\d+)/);
-    return workItemMatch ? workItemMatch[1] : null;
-  }
-
-  private async getValidAccessToken(): Promise<string | null> {
-    const now = Math.floor(Date.now() / 1000);
-
-    // 如果令牌不存在或即将过期（提前5分钟刷新），则获取新令牌
-    if (!this.accessToken || this.tokenExpiresAt <= now + 300) {
-      return await this.refreshAccessToken();
+  private extractIdentifier(title: string): string | null {
+    if (!title) {
+      return null;
     }
-
-    return this.accessToken;
+    // 尝试从标题中提取工作项标识符，例如 #xxx-01 格式
+    const identifierMatch = title.match(/#([a-zA-Z0-9]+-\d+)/);
+    return identifierMatch ? identifierMatch[1] : null;
   }
 
-  private async refreshAccessToken(): Promise<string | null> {
+  private async getAccessToken(): Promise<string | null> {
+    if (this.accessToken) {
+      return this.accessToken;
+    }
     try {
       const response = await firstValueFrom(
         this.httpService.get(`${this.apiUrl}/v1/auth/token`, {
@@ -142,18 +132,16 @@ export class PingCodeNotifier implements Notifier {
 
       if (response.data && response.data.access_token) {
         this.accessToken = response.data.access_token;
-        // 设置令牌过期时间（提前1小时过期以确保安全）
-        this.tokenExpiresAt =
-          Math.floor(Date.now() / 1000) +
-          (response.data.expires_in || 3600) -
-          3600;
-        logger.info('PingCode access token refreshed successfully', 'PingCodeNotifier');
-        return this.accessToken;
+        return response.data.access_token;
       }
-
+      logger.error('Failed to get PingCode access token', 'PingCodeClient');
       return null;
     } catch (error) {
-      logger.error('Failed to refresh PingCode access token:', 'PingCodeNotifier', error.message);
+      logger.error(
+        'Failed to get PingCode access token',
+        'PingCodeClient',
+        error.message,
+      );
       return null;
     }
   }
@@ -175,7 +163,6 @@ export class PingCodeNotifier implements Notifier {
         }),
       );
 
-      // 假设 API 返回的工作项数据中包含 id 字段
       if (
         response.data &&
         response.data.values &&
@@ -186,8 +173,9 @@ export class PingCodeNotifier implements Notifier {
 
       return null;
     } catch (error) {
-      console.error(
+      logger.error(
         `Failed to get work item ID for identifier ${identifier}:`,
+        'PingCodeClient',
         error.message,
       );
       return null;

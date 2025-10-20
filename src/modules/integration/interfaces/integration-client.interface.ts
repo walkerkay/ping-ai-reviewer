@@ -1,3 +1,10 @@
+export enum IntegrationClientType {
+  PingCode = 'pingcode',
+  DingTalk = 'dingtalk',
+  WeCom = 'wecom',
+  Feishu = 'feishu',
+}
+
 export interface NotificationMessage {
   content: string;
   title?: string;
@@ -10,7 +17,8 @@ export interface NotificationMessage {
   };
 }
 
-export interface Notifier {
+export interface IntegrationClientInterface {
   sendNotification(message: NotificationMessage): Promise<boolean>;
-  isEnabled(): boolean;
+
+  pushSummary?(summary: string): Promise<boolean>;
 }

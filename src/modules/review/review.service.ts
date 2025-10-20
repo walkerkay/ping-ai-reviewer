@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DatabaseService } from '../database/database.service';
 import { LLMFactory } from '../llm/llm.factory';
-import { NotificationService } from '../notification/notification.service';
+import { IntegrationService } from '../integration/integration.service';
 import {
   GitClientInterface,
   PullRequestInfo,
@@ -30,7 +30,7 @@ export class ReviewService {
     private configService: ConfigService,
     private databaseService: DatabaseService,
     private llmFactory: LLMFactory,
-    private notificationService: NotificationService,
+    private integrationService: IntegrationService,
     private gitFactory: GitFactory,
   ) {}
 
@@ -83,7 +83,10 @@ export class ReviewService {
         );
 
       if (hasExistingReview) {
-        logger.info('Files have not changed, skipping review generation', 'ReviewService');
+        logger.info(
+          'Files have not changed, skipping review generation',
+          'ReviewService',
+        );
         return;
       }
 
@@ -133,9 +136,14 @@ export class ReviewService {
         reviewResult,
         parsedData.projectName,
         pullRequestInfo,
+        projectConfig,
       );
     } catch (error) {
-      logger.error('Pull request review failed:', 'ReviewService', error.message);
+      logger.error(
+        'Pull request review failed:',
+        'ReviewService',
+        error.message,
+      );
     }
   }
 
@@ -170,7 +178,10 @@ export class ReviewService {
       );
 
       if (!shouldTrigger) {
-        logger.info('Review trigger check failed, skipping review', 'ReviewService');
+        logger.info(
+          'Review trigger check failed, skipping review',
+          'ReviewService',
+        );
         return;
       }
       const lastCommit = parsedData.commits[parsedData.commits.length - 1];
@@ -237,6 +248,7 @@ export class ReviewService {
         reviewResult,
         parsedData.projectName,
         null,
+        projectConfig,
       );
     } catch (error) {
       logger.error('Push review failed:', 'ReviewService', error.message);
@@ -262,7 +274,6 @@ export class ReviewService {
     return config;
   }
 
-
   private async generateCodeReview(
     changes: FileChange[],
     commitMessages: string,
@@ -275,30 +286,30 @@ export class ReviewService {
     return await llmClient.generateReview(combinedDiff, commitMessages, config);
   }
 
-
-
   private async sendReviewNotification(
     reviewResult: LLMReviewResult,
     projectName: string,
     pullRequestInfo: PullRequestInfo | null,
+    projectConfig: ProjectConfig,
   ): Promise<void> {
     if (!reviewResult.notification) {
       return;
     }
-
-    await this.notificationService.sendNotification({
-      content: reviewResult.notification,
-      title: `PingReviewer - ${projectName}`,
-      msgType: 'text',
-      additions: pullRequestInfo
-        ? {
-            pullRequest: {
-              title: pullRequestInfo.title,
-              url: pullRequestInfo.url,
-            },
-          }
-        : undefined,
-    });
+    await this.integrationService.sendNotification(
+      {
+        content: reviewResult.notification,
+        title: `PingReviewer - ${projectName}`,
+        msgType: 'text',
+        additions: pullRequestInfo
+          ? {
+              pullRequest: {
+                title: pullRequestInfo.title,
+                url: pullRequestInfo.url,
+              },
+            }
+          : undefined,
+      },
+      projectConfig.integrations,
+    );
   }
-
 }
