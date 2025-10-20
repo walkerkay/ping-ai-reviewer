@@ -45,20 +45,30 @@ export class Logger {
     return level <= this.level;
   }
 
-  private formatMessage(level: string, message: string, context?: string): string {
+  private formatMessage(
+    level: string,
+    message: string,
+    context?: string,
+  ): string {
     const timestamp = new Date().toISOString();
     const contextStr = context || this.context || '';
     const contextPrefix = contextStr ? `[${contextStr}]` : '';
     return `${timestamp} [${level}]${contextPrefix} ${message}`;
   }
 
-  private log(level: LogLevel, levelName: string, message: string, context?: string, ...args: any[]): void {
+  private log(
+    level: LogLevel,
+    levelName: string,
+    message: string,
+    context?: string,
+    ...args: any[]
+  ): void {
     if (!this.shouldLog(level)) {
       return;
     }
 
     const formattedMessage = this.formatMessage(levelName, message, context);
-    
+
     if (level === LogLevel.ERROR) {
       console.error(formattedMessage, ...args);
     } else if (level === LogLevel.WARN) {
@@ -86,14 +96,6 @@ export class Logger {
 
   public verbose(message: string, context?: string, ...args: any[]): void {
     this.log(LogLevel.VERBOSE, 'VERBOSE', message, context, ...args);
-  }
-
-  public setLevel(level: LogLevel): void {
-    this.level = level;
-  }
-
-  public getLevel(): LogLevel {
-    return this.level;
   }
 }
 
