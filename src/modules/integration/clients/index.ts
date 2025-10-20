@@ -22,5 +22,5 @@ export function getIntegrationClientClass(
   httpService: HttpService,
   config: ProjectIntegrationConfig,
 ) => BaseIntegrationClient<ProjectIntegrationConfig> {
-  return integrationClientClassMap[type] as any;
+  return integrationClientClassMap[type];
 }

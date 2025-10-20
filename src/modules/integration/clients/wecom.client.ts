@@ -35,7 +35,7 @@ export class WeComClient extends BaseIntegrationClient<ProjectIntegrationConfig>
 
   async sendNotification(message: NotificationMessage): Promise<boolean> {
     if (!this.config.notification.webhookUrl) {
-      logger.info('WeCom webhook URL is not configured');
+      logger.info('WeCom webhook URL is not configured', 'WeComClient');
       return false;
     }
 

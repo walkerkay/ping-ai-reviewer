@@ -36,7 +36,7 @@ export class DingTalkClient extends BaseIntegrationClient<ProjectIntegrationConf
 
   async sendNotification(message: NotificationMessage): Promise<boolean> {
     if (!this.config.notification.webhookUrl) {
-      logger.info('DingTalk webhook URL is not configured');
+      logger.info('DingTalk webhook URL is not configured', 'DingTalkClient');
       return false;
     }
 
@@ -52,7 +52,7 @@ export class DingTalkClient extends BaseIntegrationClient<ProjectIntegrationConf
     } catch (error) {
       logger.error(
         'DingTalk notification failed:',
-        'DingTalkNotifier',
+        'DingTalkClient',
         error.message,
       );
       return false;

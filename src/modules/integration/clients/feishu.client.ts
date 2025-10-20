@@ -43,7 +43,7 @@ export class FeishuClient extends BaseIntegrationClient<ProjectIntegrationConfig
 
   async sendNotification(message: NotificationMessage): Promise<boolean> {
     if (!this.config.notification.webhookUrl) {
-      logger.info('Feishu webhook URL is not configured');
+      logger.info('Feishu webhook URL is not configured', 'FeishuClient');
       return false;
     }
 

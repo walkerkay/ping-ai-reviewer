@@ -29,7 +29,7 @@ export class IntegrationService {
     message: NotificationMessage,
     config: ProjectConfig['integrations'],
   ): Promise<void> {
-    await Promise.all(
+    await Promise.allSettled(
       Object.entries(config).map(async ([type, integrationConfig]) => {
         const client = this.createClient(
           type as IntegrationClientType,

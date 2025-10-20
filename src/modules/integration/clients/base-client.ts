@@ -14,11 +14,7 @@ export abstract class BaseIntegrationClient<
     protected configService: ConfigService,
     protected httpService: HttpService,
     protected config: TConfig,
-  ) {
-    this.configService = configService;
-    this.httpService = httpService;
-    this.config = config;
-  }
+  ) {}
 
   validateConfig(): boolean {
     return true;

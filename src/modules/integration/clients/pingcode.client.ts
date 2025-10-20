@@ -48,7 +48,7 @@ export class PingCodeClient extends BaseIntegrationClient<ProjectIntegrationConf
       if (!workItemIdentifier) {
         logger.info(
           'No work item identifier found in message content',
-          'PingCodeNotifier',
+          'PingCodeClient',
         );
         return false;
       }
@@ -58,6 +58,7 @@ export class PingCodeClient extends BaseIntegrationClient<ProjectIntegrationConf
       if (!workItemId) {
         logger.info(
           `Work item not found for identifier: ${workItemIdentifier}`,
+          'PingCodeClient',
         );
         return false;
       }
@@ -84,7 +85,7 @@ export class PingCodeClient extends BaseIntegrationClient<ProjectIntegrationConf
     } catch (error) {
       logger.error(
         'PingCode notification failed:',
-        'PingCodeNotifier',
+        'PingCodeClient',
         error.message,
       );
       return false;
@@ -133,10 +134,14 @@ export class PingCodeClient extends BaseIntegrationClient<ProjectIntegrationConf
         this.accessToken = response.data.access_token;
         return response.data.access_token;
       }
-      logger.error('Failed to get PingCode access token');
+      logger.error('Failed to get PingCode access token', 'PingCodeClient');
       return null;
     } catch (error) {
-      logger.error('Failed to get PingCode access token', error.message);
+      logger.error(
+        'Failed to get PingCode access token',
+        'PingCodeClient',
+        error.message,
+      );
       return null;
     }
   }
@@ -168,8 +173,9 @@ export class PingCodeClient extends BaseIntegrationClient<ProjectIntegrationConf
 
       return null;
     } catch (error) {
-      console.error(
+      logger.error(
         `Failed to get work item ID for identifier ${identifier}:`,
+        'PingCodeClient',
         error.message,
       );
       return null;
