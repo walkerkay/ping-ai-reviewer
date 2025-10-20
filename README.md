@@ -16,33 +16,9 @@
 - **后端框架**: NestJS
 - **数据库**: MongoDB
 - **语言**: TypeScript
-- **容器化**: Docker & Docker Compose
 - **LLM 支持**: DeepSeek、OpenAI、通义千问、智谱AI、Ollama
 
 ## 快速开始
-
-### 使用 Docker Compose（推荐）
-
-1. **克隆项目**
-```bash
-git clone <repository-url>
-cd ping-ai-reviewer
-```
-
-2. **配置环境变量**
-```bash
-cp env.example .env
-# 编辑 .env 文件，配置必要的参数
-```
-
-3. **启动服务**
-```bash
-docker-compose up -d
-```
-
-4. **验证部署**
-- 访问 http://localhost:5001 查看服务状态
-- 访问 http://localhost:5001/health 查看健康检查
 
 ### 本地开发
 
@@ -59,8 +35,11 @@ cp env.example .env
 
 3. **启动 MongoDB**
 ```bash
-# 使用 Docker 启动 MongoDB
-docker run -d -p 27017:27017 --name mongodb mongo:7.0
+# 请确保 MongoDB 服务已启动并运行在 localhost:27017
+# 可以通过以下方式之一启动 MongoDB：
+# - 使用 MongoDB 官方安装包
+# - 使用 Homebrew: brew services start mongodb-community
+# - 使用其他包管理器
 ```
 
 4. **启动应用**
@@ -173,23 +152,30 @@ src/
 
 ### 生产环境部署
 
-1. **使用 Docker Compose**
+1. **直接部署**
 ```bash
-docker-compose -f docker-compose.yml up -d
+# 构建应用
+npm run build
+
+# 启动生产服务
+npm run start:prod
 ```
 
-2. **使用 Kubernetes**
+2. **使用 PM2 进程管理**
 ```bash
-# 创建 ConfigMap 和 Secret
-kubectl apply -f k8s/
+# 安装 PM2
+npm install -g pm2
 
-# 部署应用
-kubectl apply -f k8s/deployment.yaml
+# 启动应用
+pm2 start dist/main.js --name ping-codereview
+
+# 查看状态
+pm2 status
 ```
 
 ### 监控和日志
 
-- 应用日志：通过 Docker logs 查看
+- 应用日志：通过 PM2 logs 查看（如果使用 PM2）
 - 健康检查：`GET /health`
 - 数据库监控：MongoDB 内置监控
 
