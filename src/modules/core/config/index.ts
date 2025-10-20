@@ -44,28 +44,6 @@ const defaultConfig: ProjectConfig = {
       branch_matches: ['release/*'],
     },
   },
-  integrations: {
-    dingtalk: {
-      notification: {
-        enabled: true,
-        template:
-          '🚀 代码审查完成\n状态: {{ status }}\n问题数: {{ issues }}\n严重问题: {{ critical }}\n审查人: AI CodeReviewer',
-      },
-    },
-    pingcode: {
-      notification: {
-        enabled: true,
-        template:
-          '🚀 代码审查完成\n状态: {{ status }}\n问题数: {{ issues }}\n严重问题: {{ critical }}\n审查人: AI CodeReviewer',
-      },
-      push_summary: {
-        enabled: true,
-        summary_field: 'ai_review_summary',
-        template:
-          '🚀 代码审查完成\n状态: {{ status }}\n问题数: {{ issues }}\n严重问题: {{ critical }}\n审查人: AI CodeReviewer',
-      },
-    },
-  },
   references: [
     { path: './docs/code-style.md' },
     { url: 'https://example.com/security-guidelines' },

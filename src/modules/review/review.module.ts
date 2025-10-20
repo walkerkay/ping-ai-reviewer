@@ -2,11 +2,11 @@ import { Module } from '@nestjs/common';
 import { ReviewService } from './review.service';
 import { DatabaseModule } from '../database/database.module';
 import { LlmModule } from '../llm/llm.module';
-import { NotificationModule } from '../notification/notification.module';
+import { IntegrationModule } from '../integration/integration.module';
 import { GitModule } from '../git/git.module';
 
 @Module({
-  imports: [DatabaseModule, LlmModule, NotificationModule, GitModule],
+  imports: [DatabaseModule, LlmModule, IntegrationModule, GitModule],
   providers: [ReviewService],
   exports: [ReviewService],
 })

@@ -22,9 +22,11 @@ export interface ProjectConfig {
       branch_matches: string[];
     };
   };
-  integrations: {
+  integrations?: {
     dingtalk?: ProjectIntegrationConfig;
     pingcode?: ProjectIntegrationConfig;
+    wecom?: ProjectIntegrationConfig;
+    feishu?: ProjectIntegrationConfig;
   };
   references?: {
     path?: string;
@@ -39,8 +41,9 @@ export type ProjectTriggerConfig = ProjectConfig['trigger'];
 export type ProjectReviewConfig = ProjectConfig['review'];
 
 export interface ProjectIntegrationConfig {
+  enabled: boolean;
   notification: {
-    enabled: boolean;
+    webhookUrl?: string;
     template?: string;
   };
   push_summary?: {

@@ -3,10 +3,10 @@ import { ReportController } from './report.controller';
 import { ReportService } from './report.service';
 import { DatabaseModule } from '../database/database.module';
 import { LlmModule } from '../llm/llm.module';
-import { NotificationModule } from '../notification/notification.module';
+import { IntegrationModule } from '../integration/integration.module';
 
 @Module({
-  imports: [DatabaseModule, LlmModule, NotificationModule],
+  imports: [DatabaseModule, LlmModule, IntegrationModule],
   controllers: [ReportController],
   providers: [ReportService],
 })
