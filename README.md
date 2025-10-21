@@ -4,23 +4,13 @@
 
 ## 功能特性
 
-- 🚀 **多模型支持** - 兼容 DeepSeek、OpenAI、通义千问、智谱AI 和 Ollama
-- 📢 **消息即时推送** - 审查结果一键直达钉钉、企业微信或飞书
-- 📅 **自动化日报生成** - 基于 GitLab & GitHub Commit 记录，自动整理每日开发进展
-- 📊 **数据持久化** - 使用 MongoDB 存储审查记录和统计数据
-- 🎭 **多种审查风格** - 专业型、讽刺型、绅士型、幽默型任你选择
+- 🚀 **多模型支持** - 兼容 DeepSeek、OpenAI
+- 📢 **消息推送** - 支持 PingCode、钉钉、企业微信、飞书
+- 📅 **日报生成** - 基于 Commit 记录自动生成开发日报
+- 📊 **数据存储** - 使用 MongoDB 存储审查记录
 - 🔧 **现代化技术栈** - NestJS + MongoDB + TypeScript
 
-## 技术栈
-
-- **后端框架**: NestJS
-- **数据库**: MongoDB
-- **语言**: TypeScript
-- **LLM 支持**: DeepSeek、OpenAI、通义千问、智谱AI、Ollama
-
 ## 快速开始
-
-### 本地开发
 
 1. **安装依赖**
 ```bash
@@ -30,38 +20,19 @@ npm install
 2. **配置环境变量**
 ```bash
 cp env.example .env
-# 编辑 .env 文件
+# 编辑 .env 文件，至少配置 LLM 和 Git 平台
 ```
 
-3. **启动 MongoDB**
-```bash
-# 请确保 MongoDB 服务已启动并运行在 localhost:27017
-# 可以通过以下方式之一启动 MongoDB：
-# - 使用 MongoDB 官方安装包
-# - 使用 Homebrew: brew services start mongodb-community
-# - 使用其他包管理器
-```
-
-4. **启动应用**
+3. **启动应用**
 ```bash
 # 开发模式
 npm run start:dev
-
-# 生产模式
-npm run build
-npm run start:prod
 ```
 
 ## 环境配置
 
 ### 必需配置
-
 ```bash
-# 应用配置
-NODE_ENV=development
-PORT=5001
-MONGODB_URI=mongodb://localhost:27017/ping-ai-reviewer
-
 # LLM 配置（至少配置一个）
 LLM_PROVIDER=deepseek
 DEEPSEEK_API_KEY=your_deepseek_api_key
@@ -71,130 +42,48 @@ GITLAB_ACCESS_TOKEN=your_gitlab_token
 GITHUB_ACCESS_TOKEN=your_github_token
 ```
 
-### 可选配置
-
-```bash
-# 通知配置
-DINGTALK_ENABLED=1
-DINGTALK_WEBHOOK_URL=your_dingtalk_webhook_url
-
-# 审查配置
-SUPPORTED_EXTENSIONS=.java,.py,.php,.yml,.vue,.go,.c,.cpp,.h,.js,.css,.md,.sql
-PUSH_REVIEW_ENABLED=0
-REPORT_CRONTAB_EXPRESSION=0 18 * * 1-5
-```
-
 ## Webhook 配置
 
-### GitLab Webhook
-
-1. 在 GitLab 项目中，进入 Settings > Webhooks
+1. 在 GitLab/GitHub 项目中，进入 Settings > Webhooks
 2. 添加 Webhook URL: `http://your-server:5001/review/webhook`
 3. 选择触发事件：Push Events 和 Merge Request Events
-4. 设置 Secret Token（可选）
-
-### GitHub Webhook
-
-1. 在 GitHub 仓库中，进入 Settings > Webhooks
-2. 添加 Webhook URL: `http://your-server:5001/review/webhook`
-3. 选择事件类型：Pull requests 和 Pushes
-4. 设置 Secret（可选）
 
 ## API 接口
 
-### 健康检查
-```
-GET /health
-```
+- `GET /health` - 健康检查
+- `GET /review/daily_report` - 手动生成日报
+- `POST /review/webhook` - Webhook 接收
 
-### 手动生成日报
-```
-GET /review/daily_report?startTime=timestamp&endTime=timestamp
-```
+## 开发
 
-### Webhook 接收
-```
-POST /review/webhook
-```
-
-## 项目结构
-
+### 项目结构
 ```
 src/
-├── modules/                 # 功能模块
-│   ├── database/           # 数据库模块
-│   ├── llm/               # LLM 集成模块
-│   ├── notification/      # 通知模块
-│   ├── review/            # 代码审查模块
-│   ├── report/            # 报告生成模块
-│   └── webhook/           # Webhook 处理模块
-├── common/                # 公共模块
-├── config/                # 配置文件
-├── app.module.ts          # 应用根模块
-└── main.ts               # 应用入口
+├── modules/
+│   ├── core/               # 核心模块
+│   ├── database/           # 数据库
+│   ├── git/                # Git 平台
+│   ├── integration/        # 通知集成
+│   ├── llm/                # LLM 集成
+│   ├── review/             # 代码审查
+│   ├── report/             # 报告生成
+│   └── webhook/            # Webhook 处理
+└── main.ts                 # 应用入口
 ```
 
-## 开发指南
-
-### 添加新的 LLM 提供商
-
-1. 在 `src/modules/llm/clients/` 下创建新的客户端类
-2. 继承 `BaseLLMClient` 并实现必要的方法
-3. 在 `LLMFactory` 中注册新的提供商
-
-### 添加新的通知渠道
-
-1. 在 `src/modules/notification/notifiers/` 下创建新的通知器类
-2. 实现 `Notifier` 接口
-3. 在 `NotificationModule` 中注册新的通知器
-
-## 部署
-
-### 生产环境部署
-
-1. **直接部署**
+### 部署
 ```bash
-# 构建应用
+# 构建
 npm run build
 
-# 启动生产服务
+# 生产环境
 npm run start:prod
+
+# Vercel 部署
+vercel --prod
 ```
-
-2. **使用 PM2 进程管理**
-```bash
-# 安装 PM2
-npm install -g pm2
-
-# 启动应用
-pm2 start dist/main.js --name ping-codereview
-
-# 查看状态
-pm2 status
-```
-
-### 监控和日志
-
-- 应用日志：通过 PM2 logs 查看（如果使用 PM2）
-- 健康检查：`GET /health`
-- 数据库监控：MongoDB 内置监控
-
-## 贡献指南
-
-1. Fork 项目
-2. 创建功能分支 (`git checkout -b feature/AmazingFeature`)
-3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
-4. 推送到分支 (`git push origin feature/AmazingFeature`)
-5. 打开 Pull Request
 
 ## 许可证
 
-本项目采用 MIT 许可证 - 查看 [LICENSE](LICENSE) 文件了解详情。
-
-## 致谢
-
-- 原项目：[AI-Codereview-Gitlab](https://github.com/sunmh207/AI-Codereview-Gitlab)
-- NestJS 框架
-- MongoDB 数据库
-- 各种 LLM 提供商
+MIT License
 
