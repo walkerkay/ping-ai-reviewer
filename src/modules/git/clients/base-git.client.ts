@@ -4,33 +4,37 @@ import {
   GitClientInterface,
   GitClientConfig,
   PullRequestInfo,
-  PushInfo, 
-} from '../interfaces/git-client.interface'; 
+  PushInfo,
+  FileChange,
+} from '../interfaces/git-client.interface';
 
 @Injectable()
 export abstract class BaseGitClient implements GitClientInterface {
   protected config: GitClientConfig;
 
-  constructor(
-    protected configService: ConfigService,
-  ) {
+  constructor(protected configService: ConfigService) {
     this.config = this.initializeConfig();
   }
 
   protected abstract initializeConfig(): GitClientConfig;
 
- 
   abstract getPullRequestInfo(
     owner: string,
     repo: string,
-    pullNumber: number, 
+    pullNumber: number,
   ): Promise<PullRequestInfo>;
 
   abstract getPushInfo(
     owner: string,
     repo: string,
-    commitSha: string, 
+    commitSha: string,
   ): Promise<PushInfo>;
+
+  abstract getCommitFiles(
+    owner: string,
+    repo: string,
+    commitSha: string | string[],
+  ): Promise<FileChange[]>;
 
   abstract createPullRequestComment(
     owner: string,
