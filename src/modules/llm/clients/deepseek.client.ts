@@ -29,6 +29,7 @@ export class DeepSeekClient extends BaseLLMClient {
   async generateReview(
     diff: string,
     commitMessages: string,
+    references: string[],
     config: ProjectConfig,
   ): Promise<LLMReviewResult> {
     const promptMessages = PromptBuilder.buildReviewPrompt({

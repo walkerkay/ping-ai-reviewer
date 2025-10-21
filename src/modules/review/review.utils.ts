@@ -7,7 +7,6 @@ import {
 } from '../core/config/interfaces/config.interface';
 import { FileChange } from '../git/interfaces/git-client.interface';
 import { logger } from '../core/logger';
-import * as crypto from 'crypto';
 
 /**
  * 判断是否应该触发代码审查
@@ -124,7 +123,7 @@ export function checkReviewLimits<
   if (files.length > config.max_files) {
     logger.warn(
       `File count (${files.length}) exceeds limit (${config.max_files})`,
-      'ReviewUtils'
+      'ReviewUtils',
     );
     return true;
   }
@@ -171,27 +170,6 @@ export async function shouldSkipReview(
   }
 
   return false;
-}
-
-/**
- * 生成文件变更的哈希值
- */
-export function generateFilesHash(changes: FileChange[]): string {
-  const changeContent = changes
-    .map((change) => ({
-      path: change.filename,
-      additions: change.additions,
-      deletions: change.deletions,
-      patch: change.patch,
-    }))
-    .sort((a, b) => a.path.localeCompare(b.path))
-    .map(
-      (change) =>
-        `${change.path}:${change.additions}:${change.deletions}:${change.patch}`,
-    )
-    .join('|');
-
-  return crypto.createHash('sha256').update(changeContent).digest('hex');
 }
 
 /**
