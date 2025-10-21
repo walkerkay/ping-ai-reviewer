@@ -80,29 +80,6 @@ export class GitHubClient extends BaseGitClient {
     }
   }
 
-  private mergeFileChanges(files: FileChange[]): FileChange[] {
-    const fileMap = new Map<string, FileChange>();
-
-    files.forEach((file) => {
-      const key = file.filename;
-      if (fileMap.has(key)) {
-        // 合并同一文件的修改
-        const existing = fileMap.get(key);
-        fileMap.set(key, {
-          filename: file.filename,
-          additions: existing.additions + file.additions,
-          deletions: existing.deletions + file.deletions,
-          changes: existing.changes + file.changes,
-          patch: file.patch, // 使用最新的 patch
-          status: file.status, // 使用最新的状态
-        });
-      } else {
-        fileMap.set(key, file);
-      }
-    });
-
-    return Array.from(fileMap.values());
-  }
 
   private async getPullRequestFiles(
     owner: string,

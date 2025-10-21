@@ -31,6 +31,23 @@ export class DatabaseService {
     return review.save();
   }
 
+  async updateMergeRequestReview(
+    identifier: string,
+    updateData: Partial<MergeRequestReview>,
+  ): Promise<MergeRequestReview | null> {
+    const updatedReview = await this.mergeRequestReviewModel
+      .findOneAndUpdate(
+        { identifier },
+        {
+          ...updateData,
+          updatedAt: Date.now(),
+        },
+        { new: true },
+      )
+      .exec();
+    return updatedReview;
+  }
+
   async getMergeRequestReviews(
     query: ReviewQuery = {},
   ): Promise<MergeRequestReview[]> {
@@ -63,27 +80,7 @@ export class DatabaseService {
   ): Promise<MergeRequestReview | null> {
     return this.mergeRequestReviewModel.findOne({ identifier }).exec();
   }
-
-  async addReviewRecord(
-    identifier: string,
-    reviewRecord: {
-      lastCommitId: string;
-      createdAt: number;
-      llmResult: string;
-    },
-  ): Promise<void> {
-    await this.mergeRequestReviewModel.updateOne(
-      { identifier },
-      {
-        $push: { reviewRecords: reviewRecord },
-        $inc: { reviewCount: 1 },
-        $set: {
-          lastCommitId: reviewRecord.lastCommitId,
-          updatedAt: Date.now(),
-        },
-      },
-    );
-  }
+ 
 
   // Push Review 相关方法
   async createPushReview(reviewData: Partial<PushReview>): Promise<PushReview> {

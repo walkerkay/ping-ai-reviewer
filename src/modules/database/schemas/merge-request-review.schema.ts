@@ -20,17 +20,11 @@ export class MergeRequestReview {
   @Prop({ required: true })
   targetBranch: string;
 
-  @Prop({ required: true })
-  commitMessages: string;
-
   @Prop({ required: false })
   score: number;
 
   @Prop({ required: true })
   url: string;
-
-  @Prop({ required: true })
-  reviewResult: string;
 
   @Prop({ type: Object })
   webhookData: Record<string, any>;
@@ -41,17 +35,23 @@ export class MergeRequestReview {
   @Prop({ default: 0 })
   deletions: number;
 
-  @Prop({ type: [Object], default: [] })
-  reviewRecords: {
-    lastCommitId: string;
-    llmResult: string;
-    createdAt: number;
+  @Prop({ type: [Object], required: true })
+  commits: {
+    id: string;
+    message: string;
   }[];
 
-  @Prop({ default: Date.now() })
+  @Prop({ type: [Object], required: true })
+  reviewRecords: {
+    lastCommitId: string;
+    createdAt: number;
+    llmResult: string;
+  }[];
+
+  @Prop({ default: () => Date.now() })
   createdAt: number;
 
-  @Prop({ default: Date.now() })
+  @Prop({ default: () => Date.now() })
   updatedAt: number;
 }
 

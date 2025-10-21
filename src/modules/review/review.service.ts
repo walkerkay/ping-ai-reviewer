@@ -22,7 +22,7 @@ import {
   slugifyUrl,
   shouldSkipReview,
 } from './review.utils';
-import _ from 'lodash';
+import { last } from 'lodash';
 import { MergeRequestReview } from '../database/schemas/merge-request-review.schema';
 
 @Injectable()
@@ -43,10 +43,8 @@ export class ReviewService {
       return true;
     }
     const currentCommits = pullRequestInfo.commits.map((commit) => commit.id);
-    const lastReviewedCommit = _.last(
-      existingReview.reviewRecords,
-    ).lastCommitId;
-    return _.last(currentCommits) !== lastReviewedCommit;
+    const lastReviewedCommit = last(existingReview.reviewRecords)?.lastCommitId;
+    return last(currentCommits) !== lastReviewedCommit;
   }
 
   async handlePullRequest(parsedData: ParsedWebhookData): Promise<void> {
@@ -107,10 +105,12 @@ export class ReviewService {
 
       let changeFiles: FileChange[] = pullRequestInfo.files;
 
+      let references: string[] = [];
+
       if (existingReview && existingReview.reviewRecords.length > 0) {
-        const lastReviewedCommit = _.last(
+        const lastReviewedCommit = last(
           existingReview.reviewRecords,
-        ).lastCommitId;
+        )?.lastCommitId;
         const lastReviewedIndex = pullRequestInfo.commits.findIndex(
           (commit) => commit.id === lastReviewedCommit,
         );
@@ -120,14 +120,15 @@ export class ReviewService {
           parsedData.repo,
           changeCommits.map((commit) => commit.id),
         );
+        references = [
+          `上一次审查结果：${last(existingReview?.reviewRecords)?.llmResult || ''} \n \n`,
+        ];
       }
 
       const reviewResult = await this.generateCodeReview(
         changeFiles,
         changeCommits.map((commit) => commit.message).join('; '),
-        [
-          `上一次审查结果：${_.last(existingReview?.reviewRecords)?.llmResult || ''} \n \n`,
-        ],
+        references,
         projectConfig,
       );
 
@@ -137,7 +138,7 @@ export class ReviewService {
 
       // 生成review记录
       const reviewRecord = {
-        lastCommitId: _.last(changeCommits)?.id || '',
+        lastCommitId: last(changeCommits)?.id || '',
         createdAt: Date.now(),
         llmResult: [
           reviewResult.lineComments
@@ -154,18 +155,28 @@ export class ReviewService {
           author: pullRequestInfo.author,
           sourceBranch: pullRequestInfo.sourceBranch,
           targetBranch: pullRequestInfo.targetBranch,
-          updatedAt: Date.now(),
           url: pullRequestInfo.url,
-          reviewResult: reviewResult.detailComment,
           identifier: identifier,
           webhookData: pullRequestInfo.webhookData,
           additions,
           deletions,
+          commits: changeCommits.map((commit) => ({
+            id: commit.id,
+            message: commit.message,
+          })),
           reviewRecords: [reviewRecord],
         });
       } else {
-        // 添加review记录到现有记录
-        await this.databaseService.addReviewRecord(identifier, reviewRecord);
+        // 更新 review 记录
+        this.databaseService.updateMergeRequestReview(identifier, {
+          additions,
+          deletions,
+          commits: pullRequestInfo.commits.map((commit) => ({
+            id: commit.id,
+            message: commit.message,
+          })),
+          reviewRecords: [...existingReview.reviewRecords, reviewRecord],
+        });
       }
 
       // 添加评论
