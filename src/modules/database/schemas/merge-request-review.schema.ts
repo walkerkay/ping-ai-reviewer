@@ -6,6 +6,9 @@ export type MergeRequestReviewDocument = MergeRequestReview & Document;
 @Schema({ timestamps: true, collection: 'merge_request_reviews' })
 export class MergeRequestReview {
   @Prop({ required: true })
+  identifier: string;
+
+  @Prop({ required: true })
   projectName: string;
 
   @Prop({ required: true })
@@ -17,23 +20,11 @@ export class MergeRequestReview {
   @Prop({ required: true })
   targetBranch: string;
 
-  @Prop({ required: true })
-  updatedAt: number;
-
-  @Prop({ required: true })
-  commitMessages: string;
-
   @Prop({ required: false })
   score: number;
 
   @Prop({ required: true })
   url: string;
-
-  @Prop({ required: true })
-  reviewResult: string;
-
-  @Prop({ required: true })
-  urlSlug: string;
 
   @Prop({ type: Object })
   webhookData: Record<string, any>;
@@ -44,17 +35,31 @@ export class MergeRequestReview {
   @Prop({ default: 0 })
   deletions: number;
 
-  @Prop({ default: '' })
-  lastCommitId: string;
+  @Prop({ type: [Object], required: true })
+  commits: {
+    id: string;
+    message: string;
+  }[];
 
-  @Prop({ default: '' })
-  lastChangeHash: string;
+  @Prop({ type: [Object], required: true })
+  reviewRecords: {
+    lastCommitId: string;
+    createdAt: number;
+    llmResult: string;
+  }[];
+
+  @Prop({ default: () => Date.now() })
+  createdAt: number;
+
+  @Prop({ default: () => Date.now() })
+  updatedAt: number;
 }
 
 export const MergeRequestReviewSchema =
   SchemaFactory.createForClass(MergeRequestReview);
 
 // 创建索引
+MergeRequestReviewSchema.index({ identifier: 1 });
 MergeRequestReviewSchema.index({ updatedAt: -1 });
 MergeRequestReviewSchema.index({ projectName: 1 });
 MergeRequestReviewSchema.index({ author: 1 });

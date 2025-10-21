@@ -61,6 +61,7 @@ export interface ParsedWebhookData {
 }
 
 export interface GitClientInterface {
+
   createPullRequestComment(
     owner: string,
     repo: string,
@@ -98,6 +99,13 @@ export interface GitClientInterface {
     repo: string,
     commitSha: string
   ): Promise<PushInfo>;
+
+  getCommitFiles(
+    owner: string,
+    repo: string,
+    commitSha: string | string[],
+  ): Promise<FileChange[]>;
+
 }
 
 /**

@@ -23,7 +23,9 @@ export abstract class BaseLLMClient implements LLMClient {
   abstract generateReview(
     diff: string,
     commitMessages: string,
+    references: string[],
     config: ProjectConfig,
+
   ): Promise<LLMReviewResult>;
 
   abstract generateReport(commits: any[]): Promise<string>;

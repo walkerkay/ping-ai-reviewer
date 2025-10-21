@@ -9,6 +9,7 @@ export class PromptBuilder {
   static buildReviewPrompt(payload: {
     diff?: string;
     commitMessages?: string;
+    references?: string[];
     language: 'zh' | 'en';
     mode: 'light' | 'strict';
     max_review_length: number;
@@ -21,6 +22,7 @@ export class PromptBuilder {
         content: strictPrompt({
           commitMessages: payload.commitMessages,
           diff: payload.diff,
+          references: payload.references,
         }),
       });
     } else {
@@ -29,6 +31,7 @@ export class PromptBuilder {
         content: lightPrompt({
           commitMessages: payload.commitMessages,
           diff: payload.diff,
+          references: payload.references,
         }),
       });
     }

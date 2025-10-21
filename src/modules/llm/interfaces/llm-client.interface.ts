@@ -4,7 +4,12 @@ import { ProjectConfig } from '../../core/config';
 export type LLMReviewResult = typeof outputExample;
 
 export interface LLMClient {
-  generateReview(diff: string, commitMessages: string, config: ProjectConfig): Promise<LLMReviewResult>;
+  generateReview(
+    diff: string,
+    commitMessages: string,
+    references: string[],
+    config: ProjectConfig,
+  ): Promise<LLMReviewResult>;
   generateReport(commits: any[]): Promise<string>;
 } 
 
