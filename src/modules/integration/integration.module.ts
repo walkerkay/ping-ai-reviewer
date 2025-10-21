@@ -5,11 +5,7 @@ import { IntegrationService } from './integration.service';
 
 @Module({
   imports: [
-    HttpModule.register({
-      timeout: 10000,
-      maxRedirects: 5,
-      maxContentLength: 50 * 1024 * 1024, // 50MB
-    }),
+    HttpModule,
     ConfigModule,
   ],
   providers: [IntegrationService],
