@@ -1,0 +1,67 @@
+# 代码规范配置文件示例
+rules:
+  - id: 'variable-naming'
+    name: '变量命名规范'
+    description: '变量名应该使用驼峰命名法，常量使用大写下划线分隔'
+    severity: 'warning'
+    category: 'naming'
+    examples:
+      - bad: 'var user_name = "test"'
+        good: 'var userName = "test"'
+      - bad: 'const MAX_SIZE = 100'
+        good: 'const MAX_SIZE = 100'
+
+  - id: 'function-naming'
+    name: '函数命名规范'
+    description: '函数名应该使用动词开头，驼峰命名法'
+    severity: 'warning'
+    category: 'naming'
+    examples:
+      - bad: 'function getUserData() {}'
+        good: 'function fetchUserData() {}'
+
+  - id: 'no-console'
+    name: '禁止使用console'
+    description: '生产代码中不应该包含console.log等调试语句'
+    severity: 'error'
+    category: 'best-practices'
+    examples:
+      - bad: 'console.log("debug info")'
+        good: 'logger.info("debug info")'
+
+  - id: 'error-handling'
+    name: '错误处理'
+    description: '异步操作应该包含适当的错误处理'
+    severity: 'error'
+    category: 'error-handling'
+    examples:
+      - bad: 'fetch(url).then(data => processData(data))'
+        good: 'fetch(url).then(data => processData(data)).catch(err => handleError(err))'
+
+  - id: 'typescript-types'
+    name: 'TypeScript类型定义'
+    description: '所有函数参数和返回值都应该有明确的类型定义'
+    severity: 'warning'
+    category: 'typescript'
+    examples:
+      - bad: 'function process(data) { return data; }'
+        good: 'function process(data: UserData): ProcessedData { return data; }'
+
+categories:
+  naming:
+    name: '命名规范'
+    description: '代码命名相关的规范要求'
+  best-practices:
+    name: '最佳实践'
+    description: '代码质量和最佳实践相关规范'
+  error-handling:
+    name: '错误处理'
+    description: '错误处理和异常管理相关规范'
+  typescript:
+    name: 'TypeScript规范'
+    description: 'TypeScript特有的类型和语法规范'
+
+metadata:
+  version: '1.0.0'
+  lastUpdated: '2024-01-01'
+  author: 'Development Team'

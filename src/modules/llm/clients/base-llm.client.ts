@@ -1,11 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { ProjectConfig } from '../../core/config';
 import {
   LLMClient,
   LLMConfig,
   LLMReviewResult,
 } from '../interfaces/llm-client.interface';
-import { ProjectConfig } from '../../core/config';
 
 @Injectable()
 export abstract class BaseLLMClient implements LLMClient {
@@ -24,6 +24,7 @@ export abstract class BaseLLMClient implements LLMClient {
     diff: string,
     commitMessages: string,
     config: ProjectConfig,
+    codeStandards?: string,
   ): Promise<LLMReviewResult>;
 
   abstract generateReport(commits: any[]): Promise<string>;

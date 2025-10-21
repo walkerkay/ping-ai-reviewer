@@ -1,27 +1,27 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { DatabaseService } from '../database/database.service';
-import { LLMFactory } from '../llm/llm.factory';
-import { IntegrationService } from '../integration/integration.service';
-import {
-  GitClientInterface,
-  PullRequestInfo,
-  FileChange,
-  ParsedWebhookData,
-} from '../git/interfaces/git-client.interface';
-import { GitFactory } from '../git/git.factory';
-import { LLMReviewResult } from '../llm/interfaces/llm-client.interface';
+import { CodeStandardsService, parseConfig } from '../core/config';
 import { ProjectConfig } from '../core/config/interfaces/config.interface';
-import { parseConfig } from '../core/config';
 import { logger } from '../core/logger';
+import { DatabaseService } from '../database/database.service';
+import { GitFactory } from '../git/git.factory';
 import {
-  filterReviewableFiles,
-  shouldTriggerReview,
-  generateFilesHash,
+  FileChange,
+  GitClientInterface,
+  ParsedWebhookData,
+  PullRequestInfo,
+} from '../git/interfaces/git-client.interface';
+import { IntegrationService } from '../integration/integration.service';
+import { LLMReviewResult } from '../llm/interfaces/llm-client.interface';
+import { LLMFactory } from '../llm/llm.factory';
+import {
   calculateAdditions,
   calculateDeletions,
-  slugifyUrl,
+  filterReviewableFiles,
+  generateFilesHash,
   shouldSkipReview,
+  shouldTriggerReview,
+  slugifyUrl,
 } from './review.utils';
 
 @Injectable()
@@ -32,6 +32,7 @@ export class ReviewService {
     private llmFactory: LLMFactory,
     private integrationService: IntegrationService,
     private gitFactory: GitFactory,
+    private codeStandardsService: CodeStandardsService,
   ) {}
 
   async handlePullRequest(parsedData: ParsedWebhookData): Promise<void> {
@@ -99,6 +100,10 @@ export class ReviewService {
         pullRequestInfo.files,
         commitMessages,
         projectConfig,
+        gitClient,
+        parsedData.owner,
+        parsedData.repo,
+        parsedData.branchName,
       );
 
       // 保存到数据库
@@ -215,6 +220,10 @@ export class ReviewService {
         pushInfo.files,
         commitMessages,
         projectConfig,
+        gitClient,
+        parsedData.owner,
+        parsedData.repo,
+        parsedData.branchName,
       );
 
       // 保存到数据库
@@ -278,12 +287,43 @@ export class ReviewService {
     changes: FileChange[],
     commitMessages: string,
     config: ProjectConfig,
+    gitClient?: GitClientInterface,
+    owner?: string,
+    repo?: string,
+    ref?: string,
   ): Promise<LLMReviewResult> {
     const llmClient = this.llmFactory.getClient();
     const combinedDiff = changes
       .map((change) => `文件: ${change.filename}\n${change.patch}`)
       .join('\n\n');
-    return await llmClient.generateReview(combinedDiff, commitMessages, config);
+
+    // 加载代码规范配置
+    let codeStandardsPrompt = '';
+    if (config.codeStandards?.enabled && config.codeStandards.sources) {
+      try {
+        const codeStandards = await this.codeStandardsService.loadCodeStandards(
+          config.codeStandards.sources,
+          gitClient,
+          owner,
+          repo,
+          ref,
+        );
+        codeStandardsPrompt =
+          this.codeStandardsService.formatForLLM(codeStandards);
+      } catch (error) {
+        logger.warn(
+          `Failed to load code standards: ${error.message}`,
+          'ReviewService',
+        );
+      }
+    }
+
+    return await llmClient.generateReview(
+      combinedDiff,
+      commitMessages,
+      config,
+      codeStandardsPrompt,
+    );
   }
 
   private async sendReviewNotification(

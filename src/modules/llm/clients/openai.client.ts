@@ -1,9 +1,10 @@
+import { HttpService } from '@nestjs/axios';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
-import { BaseLLMClient } from './base-llm.client';
+import { ProjectConfig } from '../../core/config';
 import { LLMConfig, LLMReviewResult } from '../interfaces/llm-client.interface';
+import { BaseLLMClient } from './base-llm.client';
 
 @Injectable()
 export class OpenAIClient extends BaseLLMClient {
@@ -27,8 +28,10 @@ export class OpenAIClient extends BaseLLMClient {
   async generateReview(
     diff: string,
     commitMessages: string,
+    config: ProjectConfig,
+    codeStandards?: string,
   ): Promise<LLMReviewResult> {
-    const prompt = this.buildReviewPrompt(diff, commitMessages);
+    const prompt = this.buildReviewPrompt(diff, commitMessages, codeStandards);
 
     try {
       const response = await firstValueFrom(
@@ -108,8 +111,12 @@ export class OpenAIClient extends BaseLLMClient {
     }
   }
 
-  private buildReviewPrompt(diff: string, commitMessages: string): string {
-    return `
+  private buildReviewPrompt(
+    diff: string,
+    commitMessages: string,
+    codeStandards?: string,
+  ): string {
+    let prompt = `
 Please review the following code changes:
 
 Commit messages: ${commitMessages}
@@ -118,7 +125,16 @@ Code changes:
 \`\`\`
 ${diff}
 \`\`\`
+`;
 
+    if (codeStandards) {
+      prompt += `
+
+${codeStandards}
+`;
+    }
+
+    prompt += `
 Please review from the following perspectives:
 1. Code quality and standards
 2. Potential security issues
@@ -128,6 +144,8 @@ Please review from the following perspectives:
 
 Please provide specific improvement suggestions and code examples.
     `.trim();
+
+    return prompt;
   }
 
   private buildReportPrompt(commits: any[]): string {

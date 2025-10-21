@@ -1,7 +1,7 @@
-import { merge } from 'lodash';
-import { ProjectConfig } from './interfaces/config.interface';
 import * as yaml from 'js-yaml';
 import { logger } from '../logger';
+import { ProjectConfig } from './interfaces/config.interface';
+export * from './code-standards.service';
 export * from './interfaces/config.interface';
 
 const defaultConfig: ProjectConfig = {
@@ -49,6 +49,23 @@ const defaultConfig: ProjectConfig = {
     { url: 'https://example.com/security-guidelines' },
     { url: 'https://example.com/performance-checklist' },
   ],
+  codeStandards: {
+    enabled: true,
+    sources: [
+      {
+        type: 'file',
+        path: './.code-standards.yaml',
+        format: 'yaml',
+        priority: 1,
+      },
+      {
+        type: 'file',
+        path: './docs/code-standards.md',
+        format: 'markdown',
+        priority: 2,
+      },
+    ],
+  },
 };
 
 export function parseConfig(yamlString: string): ProjectConfig {
