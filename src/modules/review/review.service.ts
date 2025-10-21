@@ -45,7 +45,7 @@ export class ReviewService {
       return true;
     }
     const currentCommits = pullRequestInfo.commits.map((commit) => commit.id);
-    const lastReviewedCommit = last(existingReview.reviewRecords)?.lastCommitId;
+    const lastReviewedCommit = last(existingReview?.reviewRecords)?.lastCommitId;
     return last(currentCommits) !== lastReviewedCommit;
   }
 
@@ -354,6 +354,16 @@ export class ReviewService {
   ) {
     const parsedFiles: (DiffFile & { __filename: string })[] = [];
 
+    // === 原始模式 ===
+    if (mode === "raw") {
+      return changes
+        .map((c) => `文件: ${c.filename}\n${c.patch || ""}`)
+        .join("\n\n==================== 文件分隔 ====================\n\n");
+    }
+
+
+    // === AI 友好模式 ===
+
     // 解析每个文件的 diff
     for (const change of changes) {
       // 如果不包含删除文件且文件状态为 removed
@@ -367,15 +377,7 @@ export class ReviewService {
         })),
       );
     }
-
-    // === 原始模式 ===
-    if (mode === "raw") {
-      return changes
-        .map((c) => `文件: ${c.filename}\n${c.patch || ""}`)
-        .join("\n\n==================== 文件分隔 ====================\n\n");
-    }
-
-    // === AI 友好模式 ===
+    
     const text = parsedFiles
       .map((file) => {
         const fileHeader = `文件: ${file.to || file.from || file.__filename}`;
