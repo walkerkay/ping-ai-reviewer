@@ -24,7 +24,7 @@ export class WebhookService {
 
       if (
         parsedData.eventType === 'pull_request' &&
-        ['opened', 'reopened', 'synchronize', 'ready_for_review'].includes(
+        ['opened', 'reopened', 'synchronize', 'ready_for_review','open'].includes(
           parsedData.state,
         )
       ) {

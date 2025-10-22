@@ -14,5 +14,10 @@ export class AppController {
   getHealth(): { status: string; timestamp: string } {
     return this.appService.getHealth();
   }
+
+  @Get('status')
+  getStatus(): any {
+    return this.appService.getStatus();
+  }
 }
 

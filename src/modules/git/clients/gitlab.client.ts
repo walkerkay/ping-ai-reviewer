@@ -10,11 +10,12 @@ import {
   ParsedWebhookData,
 } from '../interfaces/git-client.interface';
 import { GitLabWebhookDto } from '../../webhook/dto/webhook.dto';
-import { Gitlab } from '@gitbeaker/rest';
+import { DiffRefsSchema, Gitlab } from '@gitbeaker/rest';
 import { logger } from '../../core/logger';
 
 @Injectable()
 export class GitLabClient extends BaseGitClient {
+
   private gitlab: InstanceType<typeof Gitlab>;
 
   protected initializeConfig(): GitClientConfig {
@@ -236,6 +237,45 @@ export class GitLabClient extends BaseGitClient {
       logger.error('Failed to add merge request note:', 'GitLabClient', error.message);
       return false;
     }
+  }
+
+  private async getDiffRefs(repo: string, pullNumber: number) {
+    const mergeRequest = await this.gitlab.MergeRequests.show(repo, pullNumber);
+    const { base_sha, head_sha, start_sha } = mergeRequest.diff_refs as DiffRefsSchema;
+    return { base_sha, head_sha, start_sha };
+  }
+
+  async createPullRequestLineComments(
+    owner: string,
+    repo: string,
+    pullNumber: number,
+    comments: Array<{ path: string; line: number; body: string; }>
+  ): Promise<boolean> {
+    const projectId = repo;
+    const { base_sha, head_sha, start_sha } = await this.getDiffRefs(projectId, pullNumber);
+    for (const comment of comments) {
+      try {
+        await this.gitlab.MergeRequestDiscussions.create(
+          projectId,
+          pullNumber,
+          comment.body,
+          {
+            position: {
+              positionType: "text",
+              baseSha: base_sha,
+              startSha: head_sha,
+              headSha: start_sha,
+              new_path: comment.path,
+              new_line: comment.line,
+            },
+          }
+        );
+      } catch (error) {
+        logger.error('Failed to add merge request discussion:', 'GitLabClient', error.message);
+      }
+    }
+    return true;
+
   }
 
   async createCommitComment(

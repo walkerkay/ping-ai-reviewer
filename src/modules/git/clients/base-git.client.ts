@@ -18,6 +18,7 @@ export abstract class BaseGitClient implements GitClientInterface {
 
   protected abstract initializeConfig(): GitClientConfig;
 
+ 
   abstract getPullRequestInfo(
     owner: string,
     repo: string,
@@ -42,6 +43,16 @@ export abstract class BaseGitClient implements GitClientInterface {
     pullNumber: number,
     body: string,
   ): Promise<boolean>;
+
+  abstract createPullRequestLineComments(
+    owner: string,
+    repo: string,
+    pullNumber: number,
+    comments: Array<{
+      path: string;
+      line: number;
+      body: string;
+    }>): Promise<boolean>;
 
   abstract createCommitComment(
     owner: string,

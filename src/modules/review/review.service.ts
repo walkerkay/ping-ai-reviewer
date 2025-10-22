@@ -19,11 +19,13 @@ import { IntegrationService } from '../integration/integration.service';
 import { LLMReviewResult } from '../llm/interfaces/llm-client.interface';
 import { LLMFactory } from '../llm/llm.factory';
 import {
+  formatDiffs,
+  validateAndCorrectLineNumbers,
+} from './line-number.utils';
+import {
   calculateAdditions,
   calculateDeletions,
-  filterReviewableFiles,
   shouldSkipReview,
-  shouldTriggerReview,
   slugifyUrl,
 } from './review.utils';
 
@@ -187,6 +189,24 @@ export class ReviewService {
           reviewRecords: [...existingReview.reviewRecords, reviewRecord],
         });
       }
+
+      // 添加行内评论
+
+      const lineComments = validateAndCorrectLineNumbers(
+        reviewResult.lineComments,
+        changeFiles,
+      ).map((comment) => ({
+        path: comment.file,
+        line: comment.line,
+        body: comment.comment,
+      }));
+
+      await gitClient.createPullRequestLineComments(
+        parsedData.owner,
+        parsedData.repo,
+        pullRequestInfo.number,
+        lineComments,
+      );
 
       // 添加评论
       await gitClient.createPullRequestComment(
@@ -355,9 +375,6 @@ export class ReviewService {
     ref?: string,
   ): Promise<LLMReviewResult> {
     const llmClient = this.llmFactory.getClient();
-    const combinedDiff = changes
-      .map((change) => `文件: ${change.filename}\n${change.patch}`)
-      .join('\n\n');
 
     // 加载配置中的参考信息
     let configReferences: string[] = [];
@@ -398,8 +415,10 @@ export class ReviewService {
     // 合并历史参考信息和配置参考信息
     const allReferences = [...references, ...configReferences];
 
+    const diff = formatDiffs(changes);
+
     return await llmClient.generateReview(
-      combinedDiff,
+      diff,
       commitMessages,
       allReferences,
       config,

@@ -347,6 +347,32 @@ export class GitHubClient extends BaseGitClient {
     }
   }
 
+  async createPullRequestLineComments(
+    owner: string,
+    repo: string,
+    pullNumber: number,
+    comments: Array<{
+      path: string;
+      line: number;
+      body: string;
+    }>
+  ): Promise<boolean> {
+    try {
+      await this.octokit.pulls.createReview({
+        owner,
+        repo,
+        pull_number: pullNumber,
+        comments,
+        event: "COMMENT",
+      });
+      return true;
+    }
+    catch (error) {
+      logger.error('Failed to create pull review comment:', 'GitHubClient', error.message);
+      return false;
+    }
+  }
+
   async createCommitComment(
     owner: string,
     repo: string,

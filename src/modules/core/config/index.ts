@@ -36,7 +36,7 @@ const defaultConfig: ProjectConfig = {
   },
   trigger: {
     events: ['pull_request', 'push'],
-    branches: ['master', 'develop'],
+    branches: ['master', 'develop', 'main'],
     include_draft: false,
     ignore_rules: {
       title_contains: ['WIP', 'Draft', 'DO NOT REVIEW'],
