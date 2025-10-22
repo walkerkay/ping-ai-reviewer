@@ -24,8 +24,7 @@ import {
 } from './review.utils';
 import { last } from 'lodash';
 import { MergeRequestReview } from '../database/schemas/merge-request-review.schema';
-import * as parseDiff from 'parse-diff';
-import { File as DiffFile, Chunk, Change } from 'parse-diff';
+import { formatDiffs, validateAndCorrectLineNumbers } from './line-number.utils';
 
 @Injectable()
 export class ReviewService {
@@ -182,17 +181,21 @@ export class ReviewService {
       }
 
       // 添加行内评论
+
+      const lineComments = validateAndCorrectLineNumbers(
+        reviewResult.lineComments,
+        changeFiles
+      ).map(comment => ({
+        path: comment.file,
+        line: comment.line,
+        body: comment.comment,
+      }));
+      
       await gitClient.commentOnLines(
         parsedData.owner,
         parsedData.repo,
         pullRequestInfo.number,
-        reviewResult.lineComments?.map(comment => {
-          return {
-            path: comment.file,
-            line: comment.line,
-            body: comment.comment,
-          }
-        }),
+        lineComments,
       );
 
       // 添加评论
@@ -347,86 +350,6 @@ export class ReviewService {
     return config;
   }
 
-  private combinedDiffs(
-    changes: FileChange[],
-    mode: "raw" | "ai-friendly" = "ai-friendly",
-    includeDeletedFiles: boolean = true
-  ) {
-    const parsedFiles: (DiffFile & { __filename: string })[] = [];
-
-    // === 原始模式 ===
-    if (mode === "raw") {
-      return changes
-        .map((c) => `文件: ${c.filename}\n${c.patch || ""}`)
-        .join("\n\n==================== 文件分隔 ====================\n\n");
-    }
-
-
-    // === AI 友好模式 ===
-
-    // 解析每个文件的 diff
-    for (const change of changes) {
-      // 如果不包含删除文件且文件状态为 removed
-      if (!includeDeletedFiles && change.status === "removed") continue;
-      if (!change.patch) continue;
-      const parsedDiffs = parseDiff(change.patch);
-      parsedFiles.push(
-        ...parsedDiffs.map((diff) => ({
-          ...diff,
-          __filename: change.filename,
-        })),
-      );
-    }
-    
-    const text = parsedFiles
-      .map((file) => {
-        const fileHeader = `文件: ${file.to || file.from || file.__filename}`;
-
-        const chunksText = file.chunks
-          .map((chunk: Chunk) => {
-            const header = `@@ -${chunk.oldStart},${chunk.oldLines} +${chunk.newStart},${chunk.newLines} @@`;
-
-            const lines = chunk.changes
-              .map((change: Change) => {
-                // diff 符号
-                const symbol =
-                  change.type === "add"
-                    ? "+"
-                    : change.type === "del"
-                      ? "-"
-                      : " ";
-
-                // 获取正确的行号
-                const lineNum =
-                  change.type === "add"
-                    ? change.ln // 新增行的行号
-                    : change.type === "del"
-                      ? change.ln // 删除行的旧行号
-                      : change.ln2 ?? change.ln1 ?? ""; // 普通行：优先用新文件的行号
-
-                // 去掉 diff 开头符号（如 + 或 -）
-                const cleanContent = change.content.replace(/^[-+ ]/, "");
-
-                // 检查特殊行 "\ No newline at end of file"
-                if (cleanContent.trim() === "\\ No newline at end of file") {
-                  return `\n${cleanContent}`; // 不加符号和行号
-                }
-
-                return `${symbol} (${lineNum}) ${cleanContent}`;
-              })
-              .join("\n");
-
-            return `${header}\n${lines}`;
-          })
-          .join("\n\n-----\n\n");
-
-        return `${fileHeader}\n${chunksText}`;
-      })
-      .join("\n\n==================== 文件分隔 ====================\n\n");
-
-    return text;
-  }
-
   private async generateCodeReview(
     changes: FileChange[],
     commitMessages: string,
@@ -435,9 +358,9 @@ export class ReviewService {
   ): Promise<LLMReviewResult> {
     const llmClient = this.llmFactory.getClient();
 
-    const combinedDiff = this.combinedDiffs(changes);
+    const diff = formatDiffs(changes);
 
-    return await llmClient.generateReview(combinedDiff, commitMessages, references, config);
+    return await llmClient.generateReview(diff, commitMessages, references, config);
   }
 
 
