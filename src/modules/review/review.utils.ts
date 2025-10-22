@@ -221,20 +221,8 @@ export function isAllowedUrl(
       return false;
     }
 
-    // 默认允许的域名白名单
-    const defaultAllowedDomains = [
-      'github.com',
-      'raw.githubusercontent.com',
-      'gist.githubusercontent.com',
-      'docs.github.com',
-      'api.github.com',
-      'gitlab.com',
-      'docs.gitlab.com',
-      'docs.pingcode.com',
-      'docs.example.com', // 示例域名，实际使用时应该替换为真实的文档域名
-    ];
+    const defaultAllowedDomains = ['github.com'];
 
-    // 合并默认白名单和自定义白名单
     const allowedDomains = [
       ...defaultAllowedDomains,
       ...(customAllowedDomains || []),
@@ -317,12 +305,12 @@ export async function loadUrlContent(
 
     return response.data;
   } catch (error) {
-    logger.error(
+    logger.warn(
       `Failed to load URL content: ${url}`,
       'ReviewUtils',
       error.message,
     );
-    throw error;
+    return '';
   }
 }
 
@@ -339,7 +327,7 @@ export async function loadReferences(
     return [];
   }
 
-  const results = await Promise.all(
+  const items = await Promise.all(
     references.map(async (reference) => {
       try {
         let content: string;
@@ -366,27 +354,23 @@ export async function loadReferences(
             `Reference item has neither path nor url: ${JSON.stringify(reference)}`,
             'ReviewUtils',
           );
-          return null;
+          return undefined;
         }
 
         if (content) {
           return { content, source, description: reference.description };
         }
-        return null;
+        return undefined;
       } catch (error) {
         logger.error(
           `Failed to load reference: ${JSON.stringify(reference)}`,
           'ReviewUtils',
           error.message,
         );
-        return null;
+        return undefined;
       }
     }),
   );
 
-  return results.filter((item) => item !== null) as Array<{
-    content: string;
-    source: string;
-    description?: string;
-  }>;
+  return items.filter((item) => item !== undefined);
 }
