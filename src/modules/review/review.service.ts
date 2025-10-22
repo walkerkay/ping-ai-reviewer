@@ -1,30 +1,34 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { DatabaseService } from '../database/database.service';
-import { LLMFactory } from '../llm/llm.factory';
-import { IntegrationService } from '../integration/integration.service';
-import {
-  GitClientInterface,
-  PullRequestInfo,
-  FileChange,
-  ParsedWebhookData,
-} from '../git/interfaces/git-client.interface';
-import { GitFactory } from '../git/git.factory';
-import { LLMReviewResult } from '../llm/interfaces/llm-client.interface';
-import { ProjectConfig } from '../core/config/interfaces/config.interface';
+import { last } from 'lodash';
 import { parseConfig } from '../core/config';
+import { ProjectConfig } from '../core/config/interfaces/config.interface';
 import { logger } from '../core/logger';
+import { ReferenceLoaderService } from '../core/reference/reference-loader.service';
+import { DatabaseService } from '../database/database.service';
+import { MergeRequestReview } from '../database/schemas/merge-request-review.schema';
+import { GitFactory } from '../git/git.factory';
 import {
-  filterReviewableFiles,
-  shouldTriggerReview,
+  FileChange,
+  GitClientInterface,
+  ParsedWebhookData,
+  PullRequestInfo,
+} from '../git/interfaces/git-client.interface';
+import { IntegrationService } from '../integration/integration.service';
+import { LLMReviewResult } from '../llm/interfaces/llm-client.interface';
+import { LLMFactory } from '../llm/llm.factory';
+import {
+  formatDiffs,
+  validateAndCorrectLineNumbers,
+} from './line-number.utils';
+import {
   calculateAdditions,
   calculateDeletions,
+  filterReviewableFiles,
+  shouldSkipReview,
+  shouldTriggerReview,
   slugifyUrl,
-  shouldSkipReview
 } from './review.utils';
-import { last } from 'lodash';
-import { MergeRequestReview } from '../database/schemas/merge-request-review.schema';
-import { formatDiffs, validateAndCorrectLineNumbers } from './line-number.utils';
 
 @Injectable()
 export class ReviewService {
@@ -34,7 +38,8 @@ export class ReviewService {
     private llmFactory: LLMFactory,
     private integrationService: IntegrationService,
     private gitFactory: GitFactory,
-  ) { }
+    private referenceLoaderService: ReferenceLoaderService,
+  ) {}
 
   private isPullRequestChanged(
     pullRequestInfo: PullRequestInfo,
@@ -44,7 +49,9 @@ export class ReviewService {
       return true;
     }
     const currentCommits = pullRequestInfo.commits.map((commit) => commit.id);
-    const lastReviewedCommit = last(existingReview?.reviewRecords)?.lastCommitId;
+    const lastReviewedCommit = last(
+      existingReview?.reviewRecords,
+    )?.lastCommitId;
     return last(currentCommits) !== lastReviewedCommit;
   }
 
@@ -106,8 +113,6 @@ export class ReviewService {
 
       let changeFiles: FileChange[] = pullRequestInfo.files;
 
-      let references: string[] = [];
-
       if (existingReview && existingReview.reviewRecords.length > 0) {
         const lastReviewedCommit = last(
           existingReview.reviewRecords,
@@ -121,15 +126,22 @@ export class ReviewService {
           parsedData.repo,
           changeCommits.map((commit) => commit.id),
         );
-        references = [
-          `上一次审查结果：${last(existingReview?.reviewRecords)?.llmResult || ''} \n \n`,
-        ];
       }
+
+      // 加载项目参考文档和历史审查记录
+      const allReferences = await this.loadProjectReferences(
+        projectConfig,
+        gitClient,
+        parsedData.owner,
+        parsedData.repo,
+        parsedData.sourceBranch,
+        existingReview,
+      );
 
       const reviewResult = await this.generateCodeReview(
         changeFiles,
         changeCommits.map((commit) => commit.message).join('; '),
-        references,
+        allReferences,
         projectConfig,
       );
 
@@ -184,13 +196,13 @@ export class ReviewService {
 
       const lineComments = validateAndCorrectLineNumbers(
         reviewResult.lineComments,
-        changeFiles
-      ).map(comment => ({
+        changeFiles,
+      ).map((comment) => ({
         path: comment.file,
         line: comment.line,
         body: comment.comment,
       }));
-      
+
       await gitClient.createPullRequestLineComments(
         parsedData.owner,
         parsedData.repo,
@@ -282,6 +294,15 @@ export class ReviewService {
         return;
       }
 
+      // 加载项目参考文档
+      const loadedReferences = await this.loadProjectReferences(
+        projectConfig,
+        gitClient,
+        parsedData.owner,
+        parsedData.repo,
+        parsedData.branchName,
+      );
+
       // 生成代码审查
       const commitMessages = pushInfo.commits
         .map((commit) => commit.message)
@@ -289,7 +310,7 @@ export class ReviewService {
       const reviewResult = await this.generateCodeReview(
         pushInfo.files,
         commitMessages,
-        [],
+        loadedReferences,
         projectConfig,
       );
 
@@ -350,6 +371,39 @@ export class ReviewService {
     return config;
   }
 
+  /**
+   * 加载项目参考文档和历史审查记录
+   */
+  private async loadProjectReferences(
+    projectConfig: ProjectConfig,
+    gitClient: GitClientInterface,
+    owner: string,
+    repo: string,
+    ref: string,
+    existingReview?: MergeRequestReview,
+  ): Promise<string[]> {
+    const references: string[] = [];
+
+    // 添加历史审查记录
+    if (existingReview && existingReview.reviewRecords.length > 0) {
+      references.push(
+        `上一次审查结果：${last(existingReview?.reviewRecords)?.llmResult || ''} \n \n`,
+      );
+    }
+
+    // 加载配置的references内容
+    const loadedReferences = await this.referenceLoaderService.loadReferences(
+      projectConfig.references || [],
+      gitClient,
+      owner,
+      repo,
+      ref,
+    );
+
+    // 合并历史references和配置的references
+    return [...references, ...loadedReferences];
+  }
+
   private async generateCodeReview(
     changes: FileChange[],
     commitMessages: string,
@@ -360,9 +414,13 @@ export class ReviewService {
 
     const diff = formatDiffs(changes);
 
-    return await llmClient.generateReview(diff, commitMessages, references, config);
+    return await llmClient.generateReview(
+      diff,
+      commitMessages,
+      references,
+      config,
+    );
   }
-
 
   private async sendReviewNotification(
     reviewResult: LLMReviewResult,
@@ -380,11 +438,11 @@ export class ReviewService {
         msgType: 'text',
         additions: pullRequestInfo
           ? {
-            pullRequest: {
-              title: pullRequestInfo.title,
-              url: pullRequestInfo.url,
-            },
-          }
+              pullRequest: {
+                title: pullRequestInfo.title,
+                url: pullRequestInfo.url,
+              },
+            }
           : undefined,
       },
       projectConfig.integrations,

@@ -1,12 +1,19 @@
 import { Module } from '@nestjs/common';
-import { ReviewService } from './review.service';
+import { ReferenceModule } from '../core/reference/reference.module';
 import { DatabaseModule } from '../database/database.module';
-import { LlmModule } from '../llm/llm.module';
-import { IntegrationModule } from '../integration/integration.module';
 import { GitModule } from '../git/git.module';
+import { IntegrationModule } from '../integration/integration.module';
+import { LlmModule } from '../llm/llm.module';
+import { ReviewService } from './review.service';
 
 @Module({
-  imports: [DatabaseModule, LlmModule, IntegrationModule, GitModule],
+  imports: [
+    DatabaseModule,
+    LlmModule,
+    IntegrationModule,
+    GitModule,
+    ReferenceModule,
+  ],
   providers: [ReviewService],
   exports: [ReviewService],
 })
