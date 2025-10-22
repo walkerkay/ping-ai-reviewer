@@ -33,6 +33,9 @@ export interface ProjectConfig {
     url?: string;
     description?: string;
   }[];
+  security?: {
+    allowed_url_domains?: string[];
+  };
 }
 
 export type ProjectFilesConfig = ProjectConfig['files'];

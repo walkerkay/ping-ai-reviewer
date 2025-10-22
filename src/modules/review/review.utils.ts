@@ -1,12 +1,17 @@
+import { HttpService } from '@nestjs/axios';
 import { minimatch } from 'minimatch';
+import { firstValueFrom } from 'rxjs';
 import {
-  ProjectFilesConfig,
-  ProjectTriggerConfig,
-  ProjectReviewConfig,
   ProjectConfig,
+  ProjectFilesConfig,
+  ProjectReviewConfig,
+  ProjectTriggerConfig,
 } from '../core/config/interfaces/config.interface';
-import { FileChange } from '../git/interfaces/git-client.interface';
 import { logger } from '../core/logger';
+import {
+  FileChange,
+  GitClientInterface,
+} from '../git/interfaces/git-client.interface';
 
 /**
  * 判断是否应该触发代码审查
@@ -195,4 +200,193 @@ export function slugifyUrl(url: string): string {
     .replace(/[^a-zA-Z0-9]/g, '_')
     .replace(/_+/g, '_')
     .replace(/^_|_$/g, '');
+}
+
+/**
+ * 验证 URL 是否在白名单中，防止 SSRF 攻击
+ */
+export function isAllowedUrl(
+  url: string,
+  customAllowedDomains?: string[],
+): boolean {
+  try {
+    const urlObj = new URL(url);
+
+    // 只允许 HTTPS 协议
+    if (urlObj.protocol !== 'https:') {
+      logger.warn(
+        `URL protocol not allowed: ${urlObj.protocol}`,
+        'ReviewUtils',
+      );
+      return false;
+    }
+
+    // 默认允许的域名白名单
+    const defaultAllowedDomains = [
+      'github.com',
+      'raw.githubusercontent.com',
+      'gist.githubusercontent.com',
+      'docs.github.com',
+      'api.github.com',
+      'gitlab.com',
+      'docs.gitlab.com',
+      'docs.pingcode.com',
+      'docs.example.com', // 示例域名，实际使用时应该替换为真实的文档域名
+    ];
+
+    // 合并默认白名单和自定义白名单
+    const allowedDomains = [
+      ...defaultAllowedDomains,
+      ...(customAllowedDomains || []),
+    ];
+
+    // 检查域名是否在白名单中
+    const isAllowed = allowedDomains.some(
+      (domain) =>
+        urlObj.hostname === domain || urlObj.hostname.endsWith(`.${domain}`),
+    );
+
+    if (!isAllowed) {
+      logger.warn(
+        `URL domain not in whitelist: ${urlObj.hostname}`,
+        'ReviewUtils',
+      );
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    logger.warn(`Invalid URL format: ${url}`, 'ReviewUtils');
+    return false;
+  }
+}
+
+/**
+ * 加载文件内容
+ */
+export async function loadFileContent(
+  path: string,
+  gitClient: GitClientInterface,
+  owner: string,
+  repo: string,
+  ref: string,
+): Promise<string> {
+  try {
+    const content = await gitClient.getContentAsText(owner, repo, path, ref);
+    if (!content) {
+      logger.warn(
+        `File content is empty or not found: ${path} in ${owner}/${repo}@${ref}`,
+        'ReviewUtils',
+      );
+      return '';
+    }
+    return content;
+  } catch (error) {
+    logger.warn(
+      `Failed to load file content: ${path} in ${owner}/${repo}@${ref}`,
+      'ReviewUtils',
+      error.message,
+    );
+    return '';
+  }
+}
+
+export async function loadUrlContent(
+  httpService: HttpService,
+  url: string,
+  customAllowedDomains?: string[],
+): Promise<string> {
+  try {
+    // 验证 URL 是否在白名单中，防止 SSRF 攻击
+    if (!isAllowedUrl(url, customAllowedDomains)) {
+      throw new Error(`URL not allowed: ${url}`);
+    }
+
+    const response = await firstValueFrom(
+      httpService.get(url, {
+        timeout: 10000,
+        headers: {
+          'User-Agent': 'PingAI-Reviewer/1.0',
+        },
+      }),
+    );
+
+    if (response.status !== 200) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    return response.data;
+  } catch (error) {
+    logger.error(
+      `Failed to load URL content: ${url}`,
+      'ReviewUtils',
+      error.message,
+    );
+    throw error;
+  }
+}
+
+export async function loadReferences(
+  references: ProjectConfig['references'],
+  gitClient: GitClientInterface,
+  owner: string,
+  repo: string,
+  ref: string,
+  httpService: HttpService,
+  customAllowedDomains?: string[],
+): Promise<Array<{ content: string; source: string; description?: string }>> {
+  if (!references || references.length === 0) {
+    return [];
+  }
+
+  const results = await Promise.all(
+    references.map(async (reference) => {
+      try {
+        let content: string;
+        let source: string;
+
+        if (reference.path) {
+          content = await loadFileContent(
+            reference.path,
+            gitClient,
+            owner,
+            repo,
+            ref,
+          );
+          source = `文件: ${reference.path}`;
+        } else if (reference.url) {
+          content = await loadUrlContent(
+            httpService,
+            reference.url,
+            customAllowedDomains,
+          );
+          source = `URL: ${reference.url}`;
+        } else {
+          logger.warn(
+            `Reference item has neither path nor url: ${JSON.stringify(reference)}`,
+            'ReviewUtils',
+          );
+          return null;
+        }
+
+        if (content) {
+          return { content, source, description: reference.description };
+        }
+        return null;
+      } catch (error) {
+        logger.error(
+          `Failed to load reference: ${JSON.stringify(reference)}`,
+          'ReviewUtils',
+          error.message,
+        );
+        return null;
+      }
+    }),
+  );
+
+  return results.filter((item) => item !== null) as Array<{
+    content: string;
+    source: string;
+    description?: string;
+  }>;
 }

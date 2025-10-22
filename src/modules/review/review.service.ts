@@ -2,7 +2,6 @@ import { HttpService } from '@nestjs/axios';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { last } from 'lodash';
-import { firstValueFrom } from 'rxjs';
 import { parseConfig } from '../core/config';
 import { ProjectConfig } from '../core/config/interfaces/config.interface';
 import { logger } from '../core/logger';
@@ -25,7 +24,10 @@ import {
 import {
   calculateAdditions,
   calculateDeletions,
+  filterReviewableFiles,
+  loadReferences,
   shouldSkipReview,
+  shouldTriggerReview,
   slugifyUrl,
 } from './review.utils';
 
@@ -387,12 +389,14 @@ export class ReviewService {
       ref
     ) {
       try {
-        const referenceContents = await this.loadReferences(
+        const referenceContents = await loadReferences(
           config.references,
           gitClient,
           owner,
           repo,
           ref,
+          this.httpService,
+          config.security?.allowed_url_domains,
         );
 
         configReferences = referenceContents.map((refContent) => {
@@ -450,123 +454,5 @@ export class ReviewService {
       },
       projectConfig.integrations,
     );
-  }
-
-  private async loadReferences(
-    references: ProjectConfig['references'],
-    gitClient: GitClientInterface,
-    owner: string,
-    repo: string,
-    ref: string,
-  ): Promise<Array<{ content: string; source: string; description?: string }>> {
-    if (!references || references.length === 0) {
-      return [];
-    }
-
-    const results: Array<{
-      content: string;
-      source: string;
-      description?: string;
-    }> = [];
-
-    for (const reference of references) {
-      try {
-        let content: string;
-        let source: string;
-
-        if (reference.path) {
-          // 读取内部文件
-          content = await this.loadFileContent(
-            reference.path,
-            gitClient,
-            owner,
-            repo,
-            ref,
-          );
-          source = `文件: ${reference.path}`;
-        } else if (reference.url) {
-          // 读取外部URL
-          content = await this.loadUrlContent(reference.url);
-          source = `URL: ${reference.url}`;
-        } else {
-          logger.warn(
-            `Reference item has neither path nor url: ${JSON.stringify(reference)}`,
-            'ReviewService',
-          );
-          continue;
-        }
-
-        if (content) {
-          results.push({
-            content,
-            source,
-            description: reference.description,
-          });
-        }
-      } catch (error) {
-        logger.error(
-          `Failed to load reference: ${JSON.stringify(reference)}`,
-          'ReviewService',
-          error.message,
-        );
-        // 继续处理其他参考信息，不中断整个流程
-      }
-    }
-
-    return results;
-  }
-
-  private async loadFileContent(
-    path: string,
-    gitClient: GitClientInterface,
-    owner: string,
-    repo: string,
-    ref: string,
-  ): Promise<string> {
-    try {
-      const content = await gitClient.getContentAsText(owner, repo, path, ref);
-      if (!content) {
-        logger.warn(
-          `File content is empty or not found: ${path} in ${owner}/${repo}@${ref}`,
-          'ReviewService',
-        );
-        return '';
-      }
-      return content;
-    } catch (error) {
-      logger.warn(
-        `Failed to load file content: ${path} in ${owner}/${repo}@${ref}`,
-        'ReviewService',
-        error.message,
-      );
-      // 不抛出错误，而是返回空字符串，让程序继续执行
-      return '';
-    }
-  }
-
-  private async loadUrlContent(url: string): Promise<string> {
-    try {
-      const response = await firstValueFrom(
-        this.httpService.get(url, {
-          timeout: 10000, // 10秒超时
-          headers: {
-            'User-Agent': 'PingAI-Reviewer/1.0',
-          },
-        }),
-      );
-
-      if (response.status !== 200) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      return response.data;
-    } catch (error) {
-      logger.error(
-        `Failed to load URL content: ${url}`,
-        'ReviewService',
-        error.message,
-      );
-      throw error;
-    }
   }
 }
