@@ -1,29 +1,31 @@
+import { HttpService } from '@nestjs/axios';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { DatabaseService } from '../database/database.service';
-import { LLMFactory } from '../llm/llm.factory';
-import { IntegrationService } from '../integration/integration.service';
-import {
-  GitClientInterface,
-  PullRequestInfo,
-  FileChange,
-  ParsedWebhookData,
-} from '../git/interfaces/git-client.interface';
-import { GitFactory } from '../git/git.factory';
-import { LLMReviewResult } from '../llm/interfaces/llm-client.interface';
-import { ProjectConfig } from '../core/config/interfaces/config.interface';
+import { last } from 'lodash';
+import { firstValueFrom } from 'rxjs';
 import { parseConfig } from '../core/config';
+import { ProjectConfig } from '../core/config/interfaces/config.interface';
 import { logger } from '../core/logger';
+import { DatabaseService } from '../database/database.service';
+import { MergeRequestReview } from '../database/schemas/merge-request-review.schema';
+import { GitFactory } from '../git/git.factory';
 import {
-  filterReviewableFiles,
-  shouldTriggerReview,
+  FileChange,
+  GitClientInterface,
+  ParsedWebhookData,
+  PullRequestInfo,
+} from '../git/interfaces/git-client.interface';
+import { IntegrationService } from '../integration/integration.service';
+import { LLMReviewResult } from '../llm/interfaces/llm-client.interface';
+import { LLMFactory } from '../llm/llm.factory';
+import {
   calculateAdditions,
   calculateDeletions,
-  slugifyUrl,
+  filterReviewableFiles,
   shouldSkipReview,
+  shouldTriggerReview,
+  slugifyUrl,
 } from './review.utils';
-import { last } from 'lodash';
-import { MergeRequestReview } from '../database/schemas/merge-request-review.schema';
 
 @Injectable()
 export class ReviewService {
@@ -33,6 +35,7 @@ export class ReviewService {
     private llmFactory: LLMFactory,
     private integrationService: IntegrationService,
     private gitFactory: GitFactory,
+    private httpService: HttpService,
   ) {}
 
   private isPullRequestChanged(
@@ -43,7 +46,9 @@ export class ReviewService {
       return true;
     }
     const currentCommits = pullRequestInfo.commits.map((commit) => commit.id);
-    const lastReviewedCommit = last(existingReview.reviewRecords)?.lastCommitId;
+    const lastReviewedCommit = last(
+      existingReview?.reviewRecords,
+    )?.lastCommitId;
     return last(currentCommits) !== lastReviewedCommit;
   }
 
@@ -130,6 +135,10 @@ export class ReviewService {
         changeCommits.map((commit) => commit.message).join('; '),
         references,
         projectConfig,
+        gitClient,
+        parsedData.owner,
+        parsedData.repo,
+        parsedData.sourceBranch,
       );
 
       // 创建或更新review记录
@@ -272,6 +281,10 @@ export class ReviewService {
         commitMessages,
         [],
         projectConfig,
+        gitClient,
+        parsedData.owner,
+        parsedData.repo,
+        parsedData.branchName,
       );
 
       // 保存到数据库
@@ -336,16 +349,59 @@ export class ReviewService {
     commitMessages: string,
     references: string[],
     config: ProjectConfig,
+    gitClient?: GitClientInterface,
+    owner?: string,
+    repo?: string,
+    ref?: string,
   ): Promise<LLMReviewResult> {
     const llmClient = this.llmFactory.getClient();
     const combinedDiff = changes
       .map((change) => `文件: ${change.filename}\n${change.patch}`)
       .join('\n\n');
 
+    // 加载配置中的参考信息
+    let configReferences: string[] = [];
+    if (
+      config.references &&
+      config.references.length > 0 &&
+      gitClient &&
+      owner &&
+      repo &&
+      ref
+    ) {
+      try {
+        const referenceContents = await this.loadReferences(
+          config.references,
+          gitClient,
+          owner,
+          repo,
+          ref,
+        );
+
+        configReferences = referenceContents.map((refContent) => {
+          let content = `来源: ${refContent.source}`;
+          if (refContent.description) {
+            content += `\n描述: ${refContent.description}`;
+          }
+          content += `\n内容:\n${refContent.content}`;
+          return content;
+        });
+      } catch (error) {
+        logger.error(
+          'Failed to load config references',
+          'ReviewService',
+          error.message,
+        );
+      }
+    }
+
+    // 合并历史参考信息和配置参考信息
+    const allReferences = [...references, ...configReferences];
+
     return await llmClient.generateReview(
       combinedDiff,
       commitMessages,
-      references,
+      allReferences,
       config,
     );
   }
@@ -375,5 +431,123 @@ export class ReviewService {
       },
       projectConfig.integrations,
     );
+  }
+
+  private async loadReferences(
+    references: ProjectConfig['references'],
+    gitClient: GitClientInterface,
+    owner: string,
+    repo: string,
+    ref: string,
+  ): Promise<Array<{ content: string; source: string; description?: string }>> {
+    if (!references || references.length === 0) {
+      return [];
+    }
+
+    const results: Array<{
+      content: string;
+      source: string;
+      description?: string;
+    }> = [];
+
+    for (const reference of references) {
+      try {
+        let content: string;
+        let source: string;
+
+        if (reference.path) {
+          // 读取内部文件
+          content = await this.loadFileContent(
+            reference.path,
+            gitClient,
+            owner,
+            repo,
+            ref,
+          );
+          source = `文件: ${reference.path}`;
+        } else if (reference.url) {
+          // 读取外部URL
+          content = await this.loadUrlContent(reference.url);
+          source = `URL: ${reference.url}`;
+        } else {
+          logger.warn(
+            `Reference item has neither path nor url: ${JSON.stringify(reference)}`,
+            'ReviewService',
+          );
+          continue;
+        }
+
+        if (content) {
+          results.push({
+            content,
+            source,
+            description: reference.description,
+          });
+        }
+      } catch (error) {
+        logger.error(
+          `Failed to load reference: ${JSON.stringify(reference)}`,
+          'ReviewService',
+          error.message,
+        );
+        // 继续处理其他参考信息，不中断整个流程
+      }
+    }
+
+    return results;
+  }
+
+  private async loadFileContent(
+    path: string,
+    gitClient: GitClientInterface,
+    owner: string,
+    repo: string,
+    ref: string,
+  ): Promise<string> {
+    try {
+      const content = await gitClient.getContentAsText(owner, repo, path, ref);
+      if (!content) {
+        logger.warn(
+          `File content is empty or not found: ${path} in ${owner}/${repo}@${ref}`,
+          'ReviewService',
+        );
+        return '';
+      }
+      return content;
+    } catch (error) {
+      logger.warn(
+        `Failed to load file content: ${path} in ${owner}/${repo}@${ref}`,
+        'ReviewService',
+        error.message,
+      );
+      // 不抛出错误，而是返回空字符串，让程序继续执行
+      return '';
+    }
+  }
+
+  private async loadUrlContent(url: string): Promise<string> {
+    try {
+      const response = await firstValueFrom(
+        this.httpService.get(url, {
+          timeout: 10000, // 10秒超时
+          headers: {
+            'User-Agent': 'PingAI-Reviewer/1.0',
+          },
+        }),
+      );
+
+      if (response.status !== 200) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      return response.data;
+    } catch (error) {
+      logger.error(
+        `Failed to load URL content: ${url}`,
+        'ReviewService',
+        error.message,
+      );
+      throw error;
+    }
   }
 }

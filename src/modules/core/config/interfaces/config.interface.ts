@@ -31,6 +31,7 @@ export interface ProjectConfig {
   references?: {
     path?: string;
     url?: string;
+    description?: string;
   }[];
 }
 

@@ -145,3 +145,4 @@ jspm_packages/
 Thumbs.db
 
 .vercel
+.history/

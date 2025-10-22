@@ -1,7 +1,6 @@
-import { merge } from 'lodash';
-import { ProjectConfig } from './interfaces/config.interface';
 import * as yaml from 'js-yaml';
 import { logger } from '../logger';
+import { ProjectConfig } from './interfaces/config.interface';
 export * from './interfaces/config.interface';
 
 const defaultConfig: ProjectConfig = {
