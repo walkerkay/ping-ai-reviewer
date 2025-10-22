@@ -20,10 +20,11 @@ import {
   calculateAdditions,
   calculateDeletions,
   slugifyUrl,
-  shouldSkipReview,
+  shouldSkipReview
 } from './review.utils';
 import { last } from 'lodash';
 import { MergeRequestReview } from '../database/schemas/merge-request-review.schema';
+import { formatDiffs, validateAndCorrectLineNumbers } from './line-number.utils';
 
 @Injectable()
 export class ReviewService {
@@ -33,7 +34,7 @@ export class ReviewService {
     private llmFactory: LLMFactory,
     private integrationService: IntegrationService,
     private gitFactory: GitFactory,
-  ) {}
+  ) { }
 
   private isPullRequestChanged(
     pullRequestInfo: PullRequestInfo,
@@ -43,7 +44,7 @@ export class ReviewService {
       return true;
     }
     const currentCommits = pullRequestInfo.commits.map((commit) => commit.id);
-    const lastReviewedCommit = last(existingReview.reviewRecords)?.lastCommitId;
+    const lastReviewedCommit = last(existingReview?.reviewRecords)?.lastCommitId;
     return last(currentCommits) !== lastReviewedCommit;
   }
 
@@ -178,6 +179,24 @@ export class ReviewService {
           reviewRecords: [...existingReview.reviewRecords, reviewRecord],
         });
       }
+
+      // 添加行内评论
+
+      const lineComments = validateAndCorrectLineNumbers(
+        reviewResult.lineComments,
+        changeFiles
+      ).map(comment => ({
+        path: comment.file,
+        line: comment.line,
+        body: comment.comment,
+      }));
+      
+      await gitClient.createPullRequestLineComments(
+        parsedData.owner,
+        parsedData.repo,
+        pullRequestInfo.number,
+        lineComments,
+      );
 
       // 添加评论
       await gitClient.createPullRequestComment(
@@ -338,17 +357,12 @@ export class ReviewService {
     config: ProjectConfig,
   ): Promise<LLMReviewResult> {
     const llmClient = this.llmFactory.getClient();
-    const combinedDiff = changes
-      .map((change) => `文件: ${change.filename}\n${change.patch}`)
-      .join('\n\n');
 
-    return await llmClient.generateReview(
-      combinedDiff,
-      commitMessages,
-      references,
-      config,
-    );
+    const diff = formatDiffs(changes);
+
+    return await llmClient.generateReview(diff, commitMessages, references, config);
   }
+
 
   private async sendReviewNotification(
     reviewResult: LLMReviewResult,
@@ -366,11 +380,11 @@ export class ReviewService {
         msgType: 'text',
         additions: pullRequestInfo
           ? {
-              pullRequest: {
-                title: pullRequestInfo.title,
-                url: pullRequestInfo.url,
-              },
-            }
+            pullRequest: {
+              title: pullRequestInfo.title,
+              url: pullRequestInfo.url,
+            },
+          }
           : undefined,
       },
       projectConfig.integrations,

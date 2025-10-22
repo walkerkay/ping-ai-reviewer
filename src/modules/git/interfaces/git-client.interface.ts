@@ -27,7 +27,7 @@ export interface PullRequestInfo {
   commits: CommitInfo[];
   webhookData: any;
   isDraft?: boolean;
-  
+
 }
 
 export interface PushInfo {
@@ -57,7 +57,7 @@ export interface ParsedWebhookData {
   state?: string;
   commits: CommitInfo[];
   webhookData: any;
- 
+
 }
 
 export interface GitClientInterface {
@@ -75,6 +75,16 @@ export interface GitClientInterface {
     commitSha: string,
     body: string,
   ): Promise<boolean>;
+
+  createPullRequestLineComments(
+    owner: string,
+    repo: string,
+    pullNumber: number,
+    comments: Array<{
+      path: string;
+      line: number;
+      body: string;
+    }>): Promise<boolean>;
 
   getContentAsText(
     owner: string,
