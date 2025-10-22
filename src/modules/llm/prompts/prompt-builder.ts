@@ -9,6 +9,7 @@ export class PromptBuilder {
   static buildReviewPrompt(payload: {
     diff?: string;
     commitMessages?: string;
+    references?: string[];
     language: 'zh' | 'en';
     mode: 'light' | 'strict';
     max_review_length: number;

@@ -77,6 +77,7 @@ export class GitLabClient extends BaseGitClient {
     }));
   }
 
+
   private async getMergeRequestFiles(
     projectId: string,
     mergeRequestIid: number,
@@ -168,13 +169,29 @@ export class GitLabClient extends BaseGitClient {
     }
   }
 
-  private async getCommitFiles(
+  async getCommitFiles(
     projectId: string,
-    commitSha: string,
+    commitSha: string | string[],
   ): Promise<FileChange[]> {
     try {
-      const changes = await this.gitlab.Commits.showDiff(projectId, commitSha);
-      return this.transformFiles(changes);
+      // 支持单个或多个 commitSha
+      const commitShas = Array.isArray(commitSha) ? commitSha : [commitSha];
+      
+      // 并行获取所有 commit 的文件修改
+      const commitFilesPromises = commitShas.map(async (sha) => {
+        try {
+          const changes = await this.gitlab.Commits.showDiff(projectId, sha);
+          return this.transformFiles(changes);
+        } catch (error) {
+          logger.error(`Failed to get commit files for ${sha}:`, 'GitLabClient', error.message);
+          return [];
+        }
+      });
+
+      const allCommitFiles = await Promise.all(commitFilesPromises);
+      
+      // 合并所有文件修改
+      return this.mergeFileChanges(allCommitFiles.flat());
     } catch (error) {
       logger.error('Failed to get commit files:', 'GitLabClient', error.message);
       return [];

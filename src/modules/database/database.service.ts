@@ -31,6 +31,23 @@ export class DatabaseService {
     return review.save();
   }
 
+  async updateMergeRequestReview(
+    identifier: string,
+    updateData: Partial<MergeRequestReview>,
+  ): Promise<MergeRequestReview | null> {
+    const updatedReview = await this.mergeRequestReviewModel
+      .findOneAndUpdate(
+        { identifier },
+        {
+          ...updateData,
+          updatedAt: Date.now(),
+        },
+        { new: true },
+      )
+      .exec();
+    return updatedReview;
+  }
+
   async getMergeRequestReviews(
     query: ReviewQuery = {},
   ): Promise<MergeRequestReview[]> {
@@ -58,40 +75,12 @@ export class DatabaseService {
       .exec();
   }
 
-  async checkMergeRequestLastCommitIdExists(
-    projectName: string,
-    sourceBranch: string,
-    targetBranch: string,
-    lastCommitId: string,
-  ): Promise<boolean> {
-    const count = await this.mergeRequestReviewModel
-      .countDocuments({
-        projectName,
-        sourceBranch,
-        targetBranch,
-        lastCommitId,
-      })
-      .exec();
-    return count > 0;
+  async getMergeRequestReviewByIdentifier(
+    identifier: string,
+  ): Promise<MergeRequestReview | null> {
+    return this.mergeRequestReviewModel.findOne({ identifier }).exec();
   }
-
-  async checkMergeRequestFilesHashExists(
-    projectName: string,
-    sourceBranch: string,
-    targetBranch: string,
-    filesHash: string,
-  ): Promise<boolean> {
-    return false;  // 暂时禁用用于测试
-    const count = await this.mergeRequestReviewModel
-      .countDocuments({
-        projectName,
-        sourceBranch,
-        targetBranch,
-        lastChangeHash: filesHash,
-      })
-      .exec();
-    return count > 0;
-  }
+ 
 
   // Push Review 相关方法
   async createPushReview(reviewData: Partial<PushReview>): Promise<PushReview> {

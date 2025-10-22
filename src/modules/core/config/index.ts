@@ -54,7 +54,7 @@ const defaultConfig: ProjectConfig = {
     sources: [
       {
         type: 'file',
-        path: './.code-standards.yaml',
+        path: './docs/.code-standards.yaml',
         format: 'yaml',
         priority: 1,
       },

@@ -26,16 +26,15 @@ export class GitHubClient extends BaseGitClient {
         'https://api.github.com',
       ),
     };
-    
+
     // 初始化 Octokit 实例
     this.octokit = new Octokit({
       auth: config.token,
       baseUrl: config.url,
     });
-    
+
     return config;
   }
-
 
   private transformFiles(files: any[]): FileChange[] {
     return files.map((file) => ({
@@ -81,6 +80,7 @@ export class GitHubClient extends BaseGitClient {
     }
   }
 
+
   private async getPullRequestFiles(
     owner: string,
     repo: string,
@@ -94,7 +94,11 @@ export class GitHubClient extends BaseGitClient {
       });
       return this.transformFiles(files || []);
     } catch (error) {
-      logger.error('Failed to get pull request files:', 'GitHubClient', error.message);
+      logger.error(
+        'Failed to get pull request files:',
+        'GitHubClient',
+        error.message,
+      );
       return [];
     }
   }
@@ -112,7 +116,11 @@ export class GitHubClient extends BaseGitClient {
       });
       return commits || [];
     } catch (error) {
-      logger.error('Failed to get pull request commits:', 'GitHubClient', error.message);
+      logger.error(
+        'Failed to get pull request commits:',
+        'GitHubClient',
+        error.message,
+      );
       return [];
     }
   }
@@ -130,7 +138,11 @@ export class GitHubClient extends BaseGitClient {
       });
       return prData;
     } catch (error) {
-      logger.error('Failed to get pull request data:', 'GitHubClient', error.message);
+      logger.error(
+        'Failed to get pull request data:',
+        'GitHubClient',
+        error.message,
+      );
       throw error;
     }
   }
@@ -161,21 +173,45 @@ export class GitHubClient extends BaseGitClient {
     };
   }
 
-  private async getCommitFiles(
+  async getCommitFiles(
     owner: string,
     repo: string,
-    commitSha: string,
+    commitSha: string | string[],
   ): Promise<FileChange[]> {
     try {
-      const { data: commitData } = await this.octokit.rest.repos.getCommit({
-        owner,
-        repo,
-        ref: commitSha,
+      // 支持单个或多个 commitSha
+      const commitShas = Array.isArray(commitSha) ? commitSha : [commitSha];
+
+      // 并行获取所有 commit 的文件修改
+      const commitFilesPromises = commitShas.map(async (sha) => {
+        try {
+          const { data: commitData } = await this.octokit.rest.repos.getCommit({
+            owner,
+            repo,
+            ref: sha,
+          });
+          const files = commitData.files || [];
+          return this.transformFiles(files);
+        } catch (error) {
+          logger.error(
+            `Failed to get commit files for ${sha}:`,
+            'GitHubClient',
+            error.message,
+          );
+          return [];
+        }
       });
-      const files = commitData.files || [];
-      return this.transformFiles(files);
+
+      const allCommitFiles = await Promise.all(commitFilesPromises);
+
+      // 合并所有文件修改
+      return this.mergeFileChanges(allCommitFiles.flat());
     } catch (error) {
-      logger.error('Failed to get commit files:', 'GitHubClient', error.message);
+      logger.error(
+        'Failed to get commit files:',
+        'GitHubClient',
+        error.message,
+      );
       return [];
     }
   }
@@ -302,7 +338,11 @@ export class GitHubClient extends BaseGitClient {
       });
       return true;
     } catch (error) {
-      logger.error('Failed to create pull request comment:', 'GitHubClient', error.message);
+      logger.error(
+        'Failed to create pull request comment:',
+        'GitHubClient',
+        error.message,
+      );
       return false;
     }
   }
@@ -322,7 +362,11 @@ export class GitHubClient extends BaseGitClient {
       });
       return true;
     } catch (error) {
-      logger.error('Failed to create commit comment:', 'GitHubClient', error.message);
+      logger.error(
+        'Failed to create commit comment:',
+        'GitHubClient',
+        error.message,
+      );
       return false;
     }
   }
@@ -365,7 +409,11 @@ export class GitHubClient extends BaseGitClient {
       );
       return decodedContent;
     } catch (error) {
-      logger.error('Failed to get content as text:', 'GitHubClient', error.message);
+      logger.error(
+        'Failed to get content as text:',
+        'GitHubClient',
+        error.message,
+      );
       return null;
     }
   }

@@ -1,9 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { last } from 'lodash';
 import { CodeStandardsService, parseConfig } from '../core/config';
 import { ProjectConfig } from '../core/config/interfaces/config.interface';
 import { logger } from '../core/logger';
 import { DatabaseService } from '../database/database.service';
+import { MergeRequestReview } from '../database/schemas/merge-request-review.schema';
 import { GitFactory } from '../git/git.factory';
 import {
   FileChange,
@@ -18,7 +20,6 @@ import {
   calculateAdditions,
   calculateDeletions,
   filterReviewableFiles,
-  generateFilesHash,
   shouldSkipReview,
   shouldTriggerReview,
   slugifyUrl,
@@ -34,6 +35,18 @@ export class ReviewService {
     private gitFactory: GitFactory,
     private codeStandardsService: CodeStandardsService,
   ) {}
+
+  private isPullRequestChanged(
+    pullRequestInfo: PullRequestInfo,
+    existingReview: MergeRequestReview,
+  ): boolean {
+    if (this.configService.get<boolean>('DEBUG')) {
+      return true;
+    }
+    const currentCommits = pullRequestInfo.commits.map((commit) => commit.id);
+    const lastReviewedCommit = last(existingReview.reviewRecords)?.lastCommitId;
+    return last(currentCommits) !== lastReviewedCommit;
+  }
 
   async handlePullRequest(parsedData: ParsedWebhookData): Promise<void> {
     try {
@@ -73,32 +86,50 @@ export class ReviewService {
         return;
       }
 
-      const filesHash = generateFilesHash(pullRequestInfo.files);
+      const identifier = slugifyUrl(pullRequestInfo.url);
 
-      const hasExistingReview =
-        await this.databaseService.checkMergeRequestFilesHashExists(
-          parsedData.projectName,
-          pullRequestInfo.sourceBranch,
-          pullRequestInfo.targetBranch,
-          filesHash,
+      const existingReview =
+        await this.databaseService.getMergeRequestReviewByIdentifier(
+          identifier,
         );
 
-      if (hasExistingReview) {
+      if (!this.isPullRequestChanged(pullRequestInfo, existingReview)) {
         logger.info(
-          'Files have not changed, skipping review generation',
+          'No new commits to review, skipping review',
           'ReviewService',
         );
         return;
       }
 
       // 生成代码审查
-      const commitMessages = pullRequestInfo.commits
-        .map((commit) => commit.message)
-        .join('; ');
+      let changeCommits = pullRequestInfo.commits;
+
+      let changeFiles: FileChange[] = pullRequestInfo.files;
+
+      let references: string[] = [];
+
+      if (existingReview && existingReview.reviewRecords.length > 0) {
+        const lastReviewedCommit = last(
+          existingReview.reviewRecords,
+        )?.lastCommitId;
+        const lastReviewedIndex = pullRequestInfo.commits.findIndex(
+          (commit) => commit.id === lastReviewedCommit,
+        );
+        changeCommits = pullRequestInfo.commits.slice(lastReviewedIndex + 1);
+        changeFiles = await gitClient.getCommitFiles(
+          parsedData.owner,
+          parsedData.repo,
+          changeCommits.map((commit) => commit.id),
+        );
+        references = [
+          `上一次审查结果：${last(existingReview?.reviewRecords)?.llmResult || ''} \n \n`,
+        ];
+      }
 
       const reviewResult = await this.generateCodeReview(
-        pullRequestInfo.files,
-        commitMessages,
+        changeFiles,
+        changeCommits.map((commit) => commit.message).join('; '),
+        references,
         projectConfig,
         gitClient,
         parsedData.owner,
@@ -106,27 +137,52 @@ export class ReviewService {
         parsedData.branchName,
       );
 
-      // 保存到数据库
+      // 创建或更新review记录
       const additions = calculateAdditions(pullRequestInfo.files);
       const deletions = calculateDeletions(pullRequestInfo.files);
 
-      await this.databaseService.createMergeRequestReview({
-        projectName: parsedData.projectName,
-        author: pullRequestInfo.author,
-        sourceBranch: pullRequestInfo.sourceBranch,
-        targetBranch: pullRequestInfo.targetBranch,
-        updatedAt: Date.now(),
-        commitMessages,
-        url: pullRequestInfo.url,
-        reviewResult: reviewResult.detailComment,
-        urlSlug: slugifyUrl(pullRequestInfo.url),
-        webhookData: pullRequestInfo.webhookData,
-        additions,
-        deletions,
-        lastCommitId:
-          pullRequestInfo.commits[pullRequestInfo.commits.length - 1]?.id || '',
-        lastChangeHash: filesHash,
-      });
+      // 生成review记录
+      const reviewRecord = {
+        lastCommitId: last(changeCommits)?.id || '',
+        createdAt: Date.now(),
+        llmResult: [
+          reviewResult.lineComments
+            ?.map((comment) => comment.comment)
+            .join('; '),
+          reviewResult.detailComment,
+        ].join('\n\n'),
+      };
+
+      // 如果是首次review，创建新记录；否则添加review记录
+      if (!existingReview) {
+        await this.databaseService.createMergeRequestReview({
+          projectName: parsedData.projectName,
+          author: pullRequestInfo.author,
+          sourceBranch: pullRequestInfo.sourceBranch,
+          targetBranch: pullRequestInfo.targetBranch,
+          url: pullRequestInfo.url,
+          identifier: identifier,
+          webhookData: pullRequestInfo.webhookData,
+          additions,
+          deletions,
+          commits: changeCommits.map((commit) => ({
+            id: commit.id,
+            message: commit.message,
+          })),
+          reviewRecords: [reviewRecord],
+        });
+      } else {
+        // 更新 review 记录
+        this.databaseService.updateMergeRequestReview(identifier, {
+          additions,
+          deletions,
+          commits: pullRequestInfo.commits.map((commit) => ({
+            id: commit.id,
+            message: commit.message,
+          })),
+          reviewRecords: [...existingReview.reviewRecords, reviewRecord],
+        });
+      }
 
       // 添加评论
       await gitClient.createPullRequestComment(
@@ -219,6 +275,7 @@ export class ReviewService {
       const reviewResult = await this.generateCodeReview(
         pushInfo.files,
         commitMessages,
+        [],
         projectConfig,
         gitClient,
         parsedData.owner,
@@ -286,6 +343,7 @@ export class ReviewService {
   private async generateCodeReview(
     changes: FileChange[],
     commitMessages: string,
+    references: string[],
     config: ProjectConfig,
     gitClient?: GitClientInterface,
     owner?: string,

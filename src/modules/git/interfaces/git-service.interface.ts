@@ -25,7 +25,7 @@ export interface GitClientInterface {
   /**
    * 获取提交文件列表
    */
-  getCommitFiles(owner: string, repo: string, commitSha: string): Promise<any[]>;
+  getCommitFiles(owner: string, repo: string, commitSha: string | string[]): Promise<any[]>;
 
   /**
    * 获取指定路径的文件内容
