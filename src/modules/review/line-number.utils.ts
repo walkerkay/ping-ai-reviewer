@@ -2,13 +2,13 @@ import { FileChange } from '../git/interfaces/git-client.interface';
 import { File as DiffFile, Chunk, Change } from 'parse-diff';
 import * as parseDiff from 'parse-diff';
 
-export interface LineMappingResult {
+interface LineMappingResult {
   originalLine: number;
   actualLine: number;
   isValid: boolean;
 }
 
-export interface DiffLineInfo {
+interface DiffLineInfo {
   lineNumber: number;
   isAddition: boolean;
   isDeletion: boolean;
@@ -61,10 +61,9 @@ export function parseDiffLines(fileChange: FileChange): DiffLineInfo[] {
  * 将diff中的行号映射到实际文件行号
  */
 export function mapDiffLineToActualLine(
-  fileChange: FileChange,
+  diffLines: DiffLineInfo[],
   diffLineNumber: number
 ): LineMappingResult {
-  const diffLines = parseDiffLines(fileChange);
 
   // 查找对应的diff行
   const targetLine = diffLines.find(line => line.lineNumber === diffLineNumber);
@@ -106,11 +105,10 @@ export function mapDiffLineToActualLine(
  * 智能匹配行号 - 当精确匹配失败时，尝试找到最接近的有效行
  */
 export function findNearestValidLine(
-  fileChange: FileChange,
+  diffLines: DiffLineInfo[],
   targetLine: number,
   maxDistance: number = 5
 ): LineMappingResult {
-  const diffLines = parseDiffLines(fileChange);
   const additionLines = diffLines.filter(line => line.isAddition);
 
   if (additionLines.length === 0) {
@@ -153,11 +151,10 @@ export function findNearestValidLine(
  * 基于内容匹配找到正确的行号
  */
 export function findLineByContent(
-  fileChange: FileChange,
+  diffLines: DiffLineInfo[],
   comment: string,
   targetLine: number
 ): LineMappingResult {
-  const diffLines = parseDiffLines(fileChange);
   const additionLines = diffLines.filter(line => line.isAddition);
 
   // 尝试从评论中提取关键词进行匹配
@@ -176,7 +173,7 @@ export function findLineByContent(
   }
 
   // 如果内容匹配失败，回退到距离匹配
-  return findNearestValidLine(fileChange, targetLine);
+  return findNearestValidLine(diffLines, targetLine);
 }
 
 /**
@@ -222,19 +219,20 @@ export function validateAndCorrectLineNumbers(
       };
     }
 
+    const diffLines = parseDiffLines(fileChange);
     // 首先尝试精确匹配
-    let mapping = mapDiffLineToActualLine(fileChange, comment.line);
+    let mapping = mapDiffLineToActualLine(diffLines, comment.line);
 
     // 如果精确匹配失败且启用了智能匹配
     if (!mapping.isValid && enableSmartMatching) {
       // 尝试基于内容的匹配
       if (enableContentMatching) {
-        mapping = findLineByContent(fileChange, comment.comment, comment.line);
+        mapping = findLineByContent(diffLines, comment.comment, comment.line);
       }
 
       // 如果内容匹配也失败，尝试距离匹配
       if (!mapping.isValid) {
-        mapping = findNearestValidLine(fileChange, comment.line, maxDistance);
+        mapping = findNearestValidLine(diffLines, comment.line, maxDistance);
       }
     }
 

@@ -44,7 +44,7 @@ export abstract class BaseGitClient implements GitClientInterface {
     body: string,
   ): Promise<boolean>;
 
-  abstract commentOnLines(
+  abstract createPullRequestLineComments(
     owner: string,
     repo: string,
     pullNumber: number,

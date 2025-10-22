@@ -191,7 +191,7 @@ export class ReviewService {
         body: comment.comment,
       }));
       
-      await gitClient.commentOnLines(
+      await gitClient.createPullRequestLineComments(
         parsedData.owner,
         parsedData.repo,
         pullRequestInfo.number,

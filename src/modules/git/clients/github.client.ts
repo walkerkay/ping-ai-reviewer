@@ -347,7 +347,7 @@ export class GitHubClient extends BaseGitClient {
     }
   }
 
-  async commentOnLines(
+  async createPullRequestLineComments(
     owner: string,
     repo: string,
     pullNumber: number,

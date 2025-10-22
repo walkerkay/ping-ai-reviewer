@@ -76,7 +76,7 @@ export interface GitClientInterface {
     body: string,
   ): Promise<boolean>;
 
-  commentOnLines(
+  createPullRequestLineComments(
     owner: string,
     repo: string,
     pullNumber: number,

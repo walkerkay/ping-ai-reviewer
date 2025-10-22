@@ -245,7 +245,7 @@ export class GitLabClient extends BaseGitClient {
     return { base_sha, head_sha, start_sha };
   }
 
-  async commentOnLines(
+  async createPullRequestLineComments(
     owner: string,
     repo: string,
     pullNumber: number,
@@ -272,7 +272,6 @@ export class GitLabClient extends BaseGitClient {
         );
       } catch (error) {
         logger.error('Failed to add merge request discussion:', 'GitLabClient', error.message);
-        return false;
       }
     }
     return true;
