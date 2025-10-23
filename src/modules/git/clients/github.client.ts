@@ -17,10 +17,10 @@ import { logger } from '../../core/logger';
 export class GitHubClient extends BaseGitClient {
   private octokit: Octokit;
 
-  protected initializeConfig(): GitClientConfig {
+  protected initializeConfig(accessToken?: string): GitClientConfig {
     const config = {
       type: GitClientType.GITHUB,
-      token: this.configService.get<string>('GITHUB_ACCESS_TOKEN'),
+      token: accessToken ?? this.configService.get<string>('GITHUB_ACCESS_TOKEN'),
       url: this.configService.get<string>(
         'GITHUB_URL',
         'https://api.github.com',

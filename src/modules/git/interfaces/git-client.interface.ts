@@ -134,3 +134,15 @@ export interface GitClientConfig {
   url: string;
   type: GitClientType;
 }
+
+// 定义事件配置映射，集中管理不同平台的事件与状态规则
+export const EVENT_CONFIG = {
+  [GitClientType.GITLAB]: {
+    pull_request: ['opened', 'reopened', 'synchronize', 'ready_for_review', 'open'],
+    push: [] // push事件无需状态过滤
+  },
+  [GitClientType.GITHUB]: {
+    pull_request: ['open', 'update', 'reopen', 'unmarked_as_draft'],
+    push: [] // push事件无需状态过滤
+  }
+};

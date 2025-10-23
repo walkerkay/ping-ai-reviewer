@@ -28,12 +28,12 @@ export class WebhookService {
           parsedData.state,
         )
       ) {
-        await this.reviewService.handlePullRequest(parsedData);
+        await this.reviewService.handlePullRequestFromWebHooks(gitlabClient, parsedData);
         return {
           message: 'GitLab merge request event processed asynchronously',
         };
       } else if (parsedData.eventType === 'push') {
-        await this.reviewService.handlePush(parsedData);
+        await this.reviewService.handlePushFromWebHooks(gitlabClient, parsedData);
         return { message: 'GitLab push event processed asynchronously' };
       }
 
@@ -64,12 +64,12 @@ export class WebhookService {
           parsedData.state,
         )
       ) {
-        await this.reviewService.handlePullRequest(parsedData);
+        await this.reviewService.handlePullRequestFromWebHooks(githubClient, parsedData);
         return {
           message: 'GitHub pull request event processed asynchronously',
         };
       } else if (parsedData.eventType === 'push') {
-        await this.reviewService.handlePush(parsedData);
+        await this.reviewService.handlePushFromWebHooks(githubClient, parsedData);
         return { message: 'GitHub push event processed asynchronously' };
       }
 

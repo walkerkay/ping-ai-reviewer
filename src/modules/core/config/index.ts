@@ -12,7 +12,7 @@ const defaultConfig: ProjectConfig = {
     mode: 'strict',
     max_review_length: 4000,
     max_files: 50,
-    max_content_length: 20000,
+    max_content_length: 500000,
   },
   files: {
     extensions: [
@@ -37,7 +37,7 @@ const defaultConfig: ProjectConfig = {
   },
   trigger: {
     events: ['pull_request', 'push'],
-    branches: ['master', 'develop', 'main'],
+    branches: ['master', 'develop','main'],
     include_draft: false,
     ignore_rules: {
       title_contains: ['WIP', 'Draft', 'DO NOT REVIEW'],

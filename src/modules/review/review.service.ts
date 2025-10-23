@@ -8,6 +8,8 @@ import {
   PullRequestInfo,
   FileChange,
   ParsedWebhookData,
+  GitClientType,
+  EVENT_CONFIG,
 } from '../git/interfaces/git-client.interface';
 import { GitFactory } from '../git/git.factory';
 import { LLMReviewResult } from '../llm/interfaces/llm-client.interface';
@@ -24,6 +26,7 @@ import {
 } from './review.utils';
 import { last } from 'lodash';
 import { MergeRequestReview } from '../database/schemas/merge-request-review.schema';
+import { ReviewRequestDto } from './dto/review.dto';
 import { formatDiffs, validateAndCorrectLineNumbers } from './line-number.utils';
 
 @Injectable()
@@ -48,21 +51,106 @@ export class ReviewService {
     return last(currentCommits) !== lastReviewedCommit;
   }
 
-  async handlePullRequest(parsedData: ParsedWebhookData): Promise<void> {
-    try {
-      const gitClient = this.getGitClient(parsedData);
+  async handlePullRequestFromWebHooks(gitClient: GitClientInterface, parsedData: ParsedWebhookData): Promise<void> {
+    await this.handlePullRequest(gitClient, {
+      repo: parsedData.repo,
+      owner: parsedData.owner,
+      mrNumber: parsedData.pullNumber || parsedData.mergeRequestIid,
+      mrState: parsedData.state,
+      sourceBranch: parsedData.sourceBranch,
+      targetBranch: parsedData.targetBranch,
+      projectName: parsedData.projectName,
+    });
+  }
 
+  async handlePushFromWebHooks(gitClient: GitClientInterface, parsedData: ParsedWebhookData): Promise<void> {
+    await this.handlePush(gitClient, {
+      repo: parsedData.repo,
+      owner: parsedData.owner,
+      commitSha: parsedData.commits[parsedData.commits.length - 1].id,
+      targetBranch: parsedData.targetBranch,
+    });
+  }
+
+  private async getProjectConfig(
+    gitClient: GitClientInterface,
+    owner: string,
+    repo: string,
+    ref: string,
+  ): Promise<ProjectConfig> {
+    const [yamlConfig, ymlConfig] = await Promise.all([
+      gitClient.getContentAsText(owner, repo, '.codereview.yaml', ref),
+      gitClient.getContentAsText(owner, repo, '.codereview.yml', ref),
+    ]);
+    const configContent = yamlConfig || ymlConfig;
+    const config = parseConfig(configContent);
+    return config;
+  }
+
+  private async generateCodeReview(
+    changes: FileChange[],
+    commitMessages: string,
+    references: string[],
+    config: ProjectConfig,
+    options?: {
+      llmProvider?: string;
+      llmApiKey?: string;
+    }
+  ): Promise<LLMReviewResult> {
+    const llmClient = this.llmFactory.getClient(options?.llmProvider, options?.llmApiKey);
+
+    const diff = formatDiffs(changes);
+
+    return await llmClient.generateReview(diff, commitMessages, references, config);
+  }
+
+  private async sendReviewNotification(
+    reviewResult: LLMReviewResult,
+    projectName: string,
+    pullRequestInfo: PullRequestInfo | null,
+    projectConfig: ProjectConfig,
+  ): Promise<void> {
+    if (!reviewResult.notification) {
+      return;
+    }
+    await this.integrationService.sendNotification(
+      {
+        content: reviewResult.notification,
+        title: `PingReviewer - ${projectName}`,
+        msgType: 'text',
+        additions: pullRequestInfo
+          ? {
+            pullRequest: {
+              title: pullRequestInfo.title,
+              url: pullRequestInfo.url,
+            },
+          }
+          : undefined,
+      },
+      projectConfig.integrations,
+    );
+  }
+
+
+  async handlePullRequest(
+    gitClient: GitClientInterface,
+    requestDto: Pick<ReviewRequestDto, 'owner' | 'repo' | 'mrNumber' | 'mrState' | 'sourceBranch' | 'targetBranch' | 'projectName'>,
+    options?: {
+      llmProvider?: string;
+      llmProviderApiKey?: string;
+    }): Promise<void> {
+    try {
       const pullRequestInfo = await gitClient.getPullRequestInfo(
-        parsedData.owner,
-        parsedData.repo,
-        parsedData.pullNumber || parsedData.mergeRequestIid,
+        requestDto.owner,
+        requestDto.repo,
+        +requestDto.mrNumber,
       );
 
       const projectConfig = await this.getProjectConfig(
         gitClient,
-        parsedData.owner,
-        parsedData.repo,
-        parsedData.sourceBranch,
+        requestDto.owner,
+        requestDto.repo,
+        requestDto.sourceBranch,
       );
 
       if (!projectConfig.review.enabled) {
@@ -76,7 +164,7 @@ export class ReviewService {
 
       const shouldSkip = await shouldSkipReview(projectConfig, {
         eventType: 'pull_request',
-        branchName: parsedData.targetBranch,
+        branchName: requestDto.targetBranch,
         files: pullRequestInfo.files,
         title: pullRequestInfo.title,
         isDraft: pullRequestInfo.isDraft,
@@ -117,8 +205,8 @@ export class ReviewService {
         );
         changeCommits = pullRequestInfo.commits.slice(lastReviewedIndex + 1);
         changeFiles = await gitClient.getCommitFiles(
-          parsedData.owner,
-          parsedData.repo,
+          requestDto.owner,
+          requestDto.repo,
           changeCommits.map((commit) => commit.id),
         );
         references = [
@@ -131,6 +219,7 @@ export class ReviewService {
         changeCommits.map((commit) => commit.message).join('; '),
         references,
         projectConfig,
+        options
       );
 
       // 创建或更新review记录
@@ -152,7 +241,7 @@ export class ReviewService {
       // 如果是首次review，创建新记录；否则添加review记录
       if (!existingReview) {
         await this.databaseService.createMergeRequestReview({
-          projectName: parsedData.projectName,
+          projectName: requestDto.projectName,
           author: pullRequestInfo.author,
           sourceBranch: pullRequestInfo.sourceBranch,
           targetBranch: pullRequestInfo.targetBranch,
@@ -179,7 +268,6 @@ export class ReviewService {
           reviewRecords: [...existingReview.reviewRecords, reviewRecord],
         });
       }
-
       // 添加行内评论
 
       const lineComments = validateAndCorrectLineNumbers(
@@ -190,18 +278,21 @@ export class ReviewService {
         line: comment.line,
         body: comment.comment,
       }));
-      
-      await gitClient.createPullRequestLineComments(
-        parsedData.owner,
-        parsedData.repo,
-        pullRequestInfo.number,
-        lineComments,
-      );
+
+      if (lineComments.length > 0) {
+        await gitClient.createPullRequestLineComments(
+          requestDto.owner,
+          requestDto.repo,
+          pullRequestInfo.number,
+          lineComments,
+        );
+      }
+
 
       // 添加评论
       await gitClient.createPullRequestComment(
-        parsedData.owner,
-        parsedData.repo,
+        requestDto.owner,
+        requestDto.repo,
         pullRequestInfo.number,
         reviewResult.detailComment,
       );
@@ -209,7 +300,7 @@ export class ReviewService {
       // 发送通知
       await this.sendReviewNotification(
         reviewResult,
-        parsedData.projectName,
+        requestDto.projectName,
         pullRequestInfo,
         projectConfig,
       );
@@ -222,7 +313,13 @@ export class ReviewService {
     }
   }
 
-  async handlePush(parsedData: ParsedWebhookData): Promise<void> {
+  async handlePush(
+    gitClient: GitClientInterface,
+    requestDto: Pick<ReviewRequestDto, 'owner' | 'repo' | 'commitSha' | 'targetBranch' | 'projectName'>,
+    options?: {
+      llmProvider?: string;
+      llmProviderApiKey?: string;
+    }): Promise<void> {
     try {
       const pushReviewEnabled =
         this.configService.get<string>('PUSH_REVIEW_ENABLED') === '1';
@@ -232,13 +329,11 @@ export class ReviewService {
         return;
       }
 
-      const gitClient = this.getGitClient(parsedData);
-
       const projectConfig = await this.getProjectConfig(
         gitClient,
-        parsedData.owner,
-        parsedData.repo,
-        parsedData.branchName,
+        requestDto.owner,
+        requestDto.repo,
+        requestDto.targetBranch,
       );
 
       if (!projectConfig.review.enabled) {
@@ -249,7 +344,7 @@ export class ReviewService {
       const shouldTrigger = shouldTriggerReview(
         projectConfig.trigger,
         'push',
-        parsedData.branchName,
+        requestDto.targetBranch,
       );
 
       if (!shouldTrigger) {
@@ -259,12 +354,12 @@ export class ReviewService {
         );
         return;
       }
-      const lastCommit = parsedData.commits[parsedData.commits.length - 1];
+      const commitSha = requestDto.commitSha;
 
       const pushInfo = await gitClient.getPushInfo(
-        parsedData.owner,
-        parsedData.repo,
-        lastCommit.id,
+        requestDto.owner,
+        requestDto.repo,
+        commitSha,
       );
 
       pushInfo.files = filterReviewableFiles(
@@ -274,7 +369,7 @@ export class ReviewService {
 
       const shouldSkip = await shouldSkipReview(projectConfig, {
         eventType: 'push',
-        branchName: parsedData.branchName,
+        branchName: requestDto.targetBranch,
         files: pushInfo.files,
       });
 
@@ -291,6 +386,7 @@ export class ReviewService {
         commitMessages,
         [],
         projectConfig,
+        options
       );
 
       // 保存到数据库
@@ -298,7 +394,7 @@ export class ReviewService {
       const deletions = calculateDeletions(pushInfo.files);
 
       await this.databaseService.createPushReview({
-        projectName: parsedData.projectName,
+        projectName: requestDto.projectName,
         author: pushInfo.author,
         branch: pushInfo.branch,
         updatedAt: Date.now(),
@@ -313,8 +409,8 @@ export class ReviewService {
       // 添加评论
       const pushLastCommit = pushInfo.commits[pushInfo.commits.length - 1];
       await gitClient.createCommitComment(
-        parsedData.owner,
-        parsedData.repo,
+        requestDto.owner,
+        requestDto.repo,
         pushLastCommit.id,
         reviewResult.detailComment,
       );
@@ -322,7 +418,7 @@ export class ReviewService {
       // 发送通知
       await this.sendReviewNotification(
         reviewResult,
-        parsedData.projectName,
+        requestDto.projectName,
         null,
         projectConfig,
       );
@@ -331,63 +427,80 @@ export class ReviewService {
     }
   }
 
-  private getGitClient(parsedData: ParsedWebhookData): GitClientInterface {
-    return this.gitFactory.createGitClient(parsedData.clientType);
-  }
-
-  private async getProjectConfig(
+  // ==============================
+  // 辅助方法：事件匹配与平台工具
+  // ==============================
+  /**
+   * 匹配事件处理器（根据事件类型+状态）
+   */
+  private matchEventHandler(
+    eventType: string,
+    mrState: string,
+    clientType: GitClientType,
+    platformConfig: typeof EVENT_CONFIG[GitClientType],
     gitClient: GitClientInterface,
-    owner: string,
-    repo: string,
-    ref: string,
-  ): Promise<ProjectConfig> {
-    const [yamlConfig, ymlConfig] = await Promise.all([
-      gitClient.getContentAsText(owner, repo, '.codereview.yaml', ref),
-      gitClient.getContentAsText(owner, repo, '.codereview.yml', ref),
-    ]);
-    const configContent = yamlConfig || ymlConfig;
-    const config = parseConfig(configContent);
-    return config;
-  }
-
-  private async generateCodeReview(
-    changes: FileChange[],
-    commitMessages: string,
-    references: string[],
-    config: ProjectConfig,
-  ): Promise<LLMReviewResult> {
-    const llmClient = this.llmFactory.getClient();
-
-    const diff = formatDiffs(changes);
-
-    return await llmClient.generateReview(diff, commitMessages, references, config);
-  }
-
-
-  private async sendReviewNotification(
-    reviewResult: LLMReviewResult,
-    projectName: string,
-    pullRequestInfo: PullRequestInfo | null,
-    projectConfig: ProjectConfig,
-  ): Promise<void> {
-    if (!reviewResult.notification) {
-      return;
+    requestDto: ReviewRequestDto
+  ) {
+    const options = {
+      llmProvider: requestDto.llmProvider,
+      llmProviderApiKey: requestDto.llmProviderApiKey,
     }
-    await this.integrationService.sendNotification(
-      {
-        content: reviewResult.notification,
-        title: `PingReviewer - ${projectName}`,
-        msgType: 'text',
-        additions: pullRequestInfo
-          ? {
-            pullRequest: {
-              title: pullRequestInfo.title,
-              url: pullRequestInfo.url,
-            },
-          }
-          : undefined,
-      },
-      projectConfig.integrations,
-    );
+    switch (eventType) {
+      case 'pull_request':
+        const allowedStates = platformConfig.pull_request;
+        if (!allowedStates.includes(mrState)) {
+          throw new Error(`${clientType} PR状态不匹配（当前: ${mrState}，允许: ${allowedStates.join(', ')}）`);
+        }
+        return {
+          handler: () => this.handlePullRequest(gitClient, requestDto, options),
+          eventLabel: 'PR'
+        };
+
+      case 'push':
+        return {
+          handler: () => this.handlePush(gitClient, requestDto, options),
+          eventLabel: 'Push'
+        };
+
+      default:
+        throw new Error(`${clientType} 不支持的事件类型: ${eventType}`);
+    }
   }
+
+  // ==============================
+  // 公共入口方法（对外暴露的API）
+  // ==============================
+  public async ReviewCode(clientType: GitClientType, reviewRequestDto: ReviewRequestDto) {
+    try {
+      const { eventType, mrState } = reviewRequestDto;
+      const platformConfig = EVENT_CONFIG[clientType];
+
+      // 1. 校验客户端类型
+      if (!platformConfig) {
+        throw new Error(`不支持的代码平台：${clientType}`);
+      }
+
+      // 2. 创建Git客户端（校验后实例化，避免无效资源）
+      const gitClient = this.gitFactory.createGitClient(clientType, reviewRequestDto.token);
+
+      // 3. 匹配事件类型并执行对应逻辑
+      const { handler, eventLabel } = this.matchEventHandler(
+        eventType,
+        mrState,
+        clientType,
+        platformConfig,
+        gitClient,
+        reviewRequestDto
+      );
+
+      // 4. 执行处理逻辑
+      await handler();
+      return { message: `${clientType} ${eventLabel} 事件已异步处理` };
+
+    } catch (error) {
+      logger.error(`代码审查入口失败:`, 'ReviewService', error.message);
+      throw error; // 抛出错误让上层统一处理
+    }
+  }
+
 }

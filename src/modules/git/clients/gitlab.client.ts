@@ -18,9 +18,9 @@ export class GitLabClient extends BaseGitClient {
 
   private gitlab: InstanceType<typeof Gitlab>;
 
-  protected initializeConfig(): GitClientConfig {
+  protected initializeConfig(accessToken?: string): GitClientConfig {
     const config = {
-      token: this.configService.get<string>('GITLAB_ACCESS_TOKEN'),
+      token: accessToken || this.configService.get<string>('GITLAB_ACCESS_TOKEN'),
       url: this.configService.get<string>('GITLAB_URL', 'https://gitlab.com'),
       type: GitClientType.GITLAB,
     };
