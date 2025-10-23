@@ -38,7 +38,7 @@ export class DeepSeekClient extends BaseLLMClient {
       max_review_length: config.review.max_review_length,
       diff,
       references,
-      commitMessages,
+      commitMessages
     });
 
     try {
