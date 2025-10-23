@@ -5,9 +5,7 @@ import { firstValueFrom } from 'rxjs';
 import { NotificationMessage } from '../interfaces/integration-client.interface';
 import { logger } from '../../core/logger';
 import { BaseIntegrationClient } from './base-client';
-import {
-  ProjectIntegrationConfig,
-} from '../../core/config';
+import { ProjectIntegrationConfig } from '../../core/config';
 
 @Injectable()
 export class PingCodeClient extends BaseIntegrationClient<ProjectIntegrationConfig> {
@@ -96,7 +94,8 @@ export class PingCodeClient extends BaseIntegrationClient<ProjectIntegrationConf
     let content = '';
 
     if (message.additions?.pullRequest?.title) {
-      content += `🔗 URL: ${message.additions?.pullRequest?.url}\n`;
+      content += `
+      🚀 代码审查完\n\nURL: ${message.additions?.pullRequest?.url}\n`;
     }
     content += message.content;
 

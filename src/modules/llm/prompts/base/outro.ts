@@ -12,11 +12,9 @@ export const outputExample = {
 };
 
 const defaultNotificationTemplate = `
-  🚀 代码审查完成
-  状态: {{ status }}  ✅ 可合并、🤏 轻微问题、💥 需要修复
-  问题数: {{ issues }}
-  严重问题: {{ critical }}
-  审查人: AI CodeReviewer
+  状态: {{ status }}  ✅ 可合并、🔍 需检查 、💥 严重问题
+  1.存在 2 处命名不规范问题，建议修改变量名
+  2.存在 1 处严重缺陷
   `;
 
 export function outroPrompt(
