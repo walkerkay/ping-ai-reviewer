@@ -39,7 +39,7 @@ const MARKDOWN_REGEX = {
 };
 
 @Injectable()
-export class ReferenceLoaderService {
+export class AssetsLoaderService {
   private cache = new Map<string, LoadedReference>();
   private readonly CACHE_TTL = 5 * 60 * 1000; // 5分钟缓存
   private readonly MAX_CONTENT_LENGTH = 3000; // 最大内容长度

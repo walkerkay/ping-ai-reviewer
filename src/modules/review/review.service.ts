@@ -4,7 +4,7 @@ import { last } from 'lodash';
 import { parseConfig } from '../core/config';
 import { ProjectConfig } from '../core/config/interfaces/config.interface';
 import { logger } from '../core/logger';
-import { ReferenceLoaderService } from '../core/reference/reference-loader.service';
+import { AssetsLoaderService } from '../core/utils/assets-loader.service';
 import { DatabaseService } from '../database/database.service';
 import { MergeRequestReview } from '../database/schemas/merge-request-review.schema';
 import { GitFactory } from '../git/git.factory';
@@ -38,7 +38,7 @@ export class ReviewService {
     private llmFactory: LLMFactory,
     private integrationService: IntegrationService,
     private gitFactory: GitFactory,
-    private referenceLoaderService: ReferenceLoaderService,
+    private assetsLoaderService: AssetsLoaderService,
   ) {}
 
   private isPullRequestChanged(
@@ -110,8 +110,8 @@ export class ReviewService {
 
       // 生成代码审查
       let changeCommits = pullRequestInfo.commits;
-
       let changeFiles: FileChange[] = pullRequestInfo.files;
+      let references: string[] = [];
 
       if (existingReview && existingReview.reviewRecords.length > 0) {
         const lastReviewedCommit = last(
@@ -126,17 +126,22 @@ export class ReviewService {
           parsedData.repo,
           changeCommits.map((commit) => commit.id),
         );
+        references = [
+          `上一次审查结果：${last(existingReview?.reviewRecords)?.llmResult || ''} \n \n`,
+        ];
       }
 
-      // 加载项目参考文档和历史审查记录
-      const allReferences = await this.loadProjectReferences(
+      // 加载项目参考文档
+      const loadedReferences = await this.loadProjectReferences(
         projectConfig,
         gitClient,
         parsedData.owner,
         parsedData.repo,
         parsedData.sourceBranch,
-        existingReview,
       );
+
+      // 合并历史references和配置的references
+      const allReferences = [...references, ...loadedReferences];
 
       const reviewResult = await this.generateCodeReview(
         changeFiles,
@@ -372,7 +377,7 @@ export class ReviewService {
   }
 
   /**
-   * 加载项目参考文档和历史审查记录
+   * 加载项目参考文档
    */
   private async loadProjectReferences(
     projectConfig: ProjectConfig,
@@ -380,28 +385,15 @@ export class ReviewService {
     owner: string,
     repo: string,
     ref: string,
-    existingReview?: MergeRequestReview,
   ): Promise<string[]> {
-    const references: string[] = [];
-
-    // 添加历史审查记录
-    if (existingReview && existingReview.reviewRecords.length > 0) {
-      references.push(
-        `上一次审查结果：${last(existingReview?.reviewRecords)?.llmResult || ''} \n \n`,
-      );
-    }
-
     // 加载配置的references内容
-    const loadedReferences = await this.referenceLoaderService.loadReferences(
+    return await this.assetsLoaderService.loadReferences(
       projectConfig.references || [],
       gitClient,
       owner,
       repo,
       ref,
     );
-
-    // 合并历史references和配置的references
-    return [...references, ...loadedReferences];
   }
 
   private async generateCodeReview(
