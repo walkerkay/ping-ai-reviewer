@@ -43,11 +43,7 @@ const defaultConfig: ProjectConfig = {
       branch_matches: ['release/*'],
     },
   },
-  references: [
-    { path: './docs/code-style.md' },
-    { url: 'https://example.com/security-guidelines' },
-    { url: 'https://example.com/performance-checklist' },
-  ],
+  references: [],
 };
 
 export function parseConfig(yamlString: string): ProjectConfig {

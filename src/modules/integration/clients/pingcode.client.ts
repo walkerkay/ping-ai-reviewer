@@ -7,6 +7,10 @@ import { logger } from '../../core/logger';
 import { BaseIntegrationClient } from './base-client';
 import { ProjectIntegrationConfig } from '../../core/config';
 
+const workItemCache: Map<string, { id: string }> = new Map();
+
+const tokenCache: Map<string, string> = new Map();
+
 @Injectable()
 export class PingCodeClient extends BaseIntegrationClient<ProjectIntegrationConfig> {
   private accessToken: string | null = null;
@@ -31,6 +35,54 @@ export class PingCodeClient extends BaseIntegrationClient<ProjectIntegrationConf
 
   validateConfig(): boolean {
     return !!this.apiUrl && !!this.clientId && !!this.clientSecret;
+  }
+
+  async pushSummary(
+    prTitle: string,
+    field: string,
+    summary: string,
+  ): Promise<boolean> {
+    try {
+      const token = await this.getAccessToken();
+
+      const workItemIdentifier = this.extractIdentifier(prTitle);
+
+      if (!workItemIdentifier) {
+        logger.info(
+          'No work item identifier found in message content',
+          'PingCodeClient',
+        );
+        return false;
+      }
+
+      const workItemId = await this.getWorkItemId(workItemIdentifier, token);
+
+      if (workItemId) {
+        summary = `🤖 ${summary}`;
+        const response = await firstValueFrom(
+          this.httpService.patch(
+            `${this.apiUrl}/v1/project/work_items/${workItemId}`,
+            {
+              [field]: summary,
+              [`properties.${field}`]: summary,
+            },
+            {
+              headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json',
+              },
+            },
+          ),
+        );
+        return response.status === 200 || response.status === 201;
+      }
+    } catch (error) {
+      logger.error(
+        'PingCode push summary failed:',
+        'PingCodeClient',
+        error.message,
+      );
+    }
   }
 
   async sendNotification(message: NotificationMessage): Promise<boolean> {
@@ -94,8 +146,7 @@ export class PingCodeClient extends BaseIntegrationClient<ProjectIntegrationConf
     let content = '';
 
     if (message.additions?.pullRequest?.title) {
-      content += `
-      🚀 代码审查完\n\nURL: ${message.additions?.pullRequest?.url}\n`;
+      content += `🤖 代码审查完成\nURL: ${message.additions?.pullRequest?.url}\n`;
     }
     content += message.content;
 
@@ -112,8 +163,9 @@ export class PingCodeClient extends BaseIntegrationClient<ProjectIntegrationConf
   }
 
   private async getAccessToken(): Promise<string | null> {
-    if (this.accessToken) {
-      return this.accessToken;
+    const cached = tokenCache.get(this.clientId);
+    if (cached) {
+      return cached;
     }
     try {
       const response = await firstValueFrom(
@@ -131,6 +183,7 @@ export class PingCodeClient extends BaseIntegrationClient<ProjectIntegrationConf
 
       if (response.data && response.data.access_token) {
         this.accessToken = response.data.access_token;
+        tokenCache.set(this.clientId, response.data.access_token);
         return response.data.access_token;
       }
       logger.error('Failed to get PingCode access token', 'PingCodeClient');
@@ -150,6 +203,10 @@ export class PingCodeClient extends BaseIntegrationClient<ProjectIntegrationConf
     token: string,
   ): Promise<string | null> {
     try {
+      const cached = workItemCache.get(identifier);
+      if (cached) {
+        return cached.id;
+      }
       const response = await firstValueFrom(
         this.httpService.get(`${this.apiUrl}/v1/project/work_items`, {
           params: {
@@ -167,7 +224,9 @@ export class PingCodeClient extends BaseIntegrationClient<ProjectIntegrationConf
         response.data.values &&
         response.data.values.length > 0
       ) {
-        return response.data.values[0].id;
+        const workItemId = response.data.values[0].id;
+        workItemCache.set(identifier, { id: workItemId });
+        return workItemId;
       }
 
       return null;
