@@ -20,5 +20,9 @@ export interface NotificationMessage {
 export interface IntegrationClientInterface {
   sendNotification(message: NotificationMessage): Promise<boolean>;
 
-  pushSummary?(summary: string): Promise<boolean>;
+  pushSummary?(
+    prTitle: string,
+    field: string,
+    summary: string,
+  ): Promise<boolean>;
 }

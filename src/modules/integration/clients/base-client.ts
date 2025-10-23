@@ -26,7 +26,11 @@ export abstract class BaseIntegrationClient<
 
   abstract sendNotification(message: NotificationMessage): Promise<boolean>;
 
-  async pushSummary(summary: string): Promise<boolean> {
+  async pushSummary(
+    prTitle: string,
+    field: string,
+    summary: string,
+  ): Promise<boolean> {
     return true;
   }
 }
