@@ -1,28 +1,32 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { last } from 'lodash';
+import { parseConfig } from '../core/config';
+import { ProjectConfig } from '../core/config/interfaces/config.interface';
+import { logger } from '../core/logger';
+import { AssetsLoaderService } from '../core/utils/assets-loader.service';
 import { DatabaseService } from '../database/database.service';
-import { LLMFactory } from '../llm/llm.factory';
-import { IntegrationService } from '../integration/integration.service';
+import { MergeRequestReview } from '../database/schemas/merge-request-review.schema';
 import {
+  FileChange,
   GitClientInterface,
   PullRequestInfo,
-  FileChange
 } from '../git/interfaces/git-client.interface';
+import { IntegrationService } from '../integration/integration.service';
 import { LLMReviewResult } from '../llm/interfaces/llm-client.interface';
-import { ProjectConfig } from '../core/config/interfaces/config.interface';
-import { parseConfig } from '../core/config';
-import { logger } from '../core/logger';
+import { LLMFactory } from '../llm/llm.factory';
 import {
-  filterReviewableFiles,
-  shouldTriggerReview,
+  formatDiffs,
+  validateAndCorrectLineNumbers,
+} from './line-number.utils';
+import {
   calculateAdditions,
   calculateDeletions,
+  filterReviewableFiles,
+  shouldSkipReview,
+  shouldTriggerReview,
   slugifyUrl,
-  shouldSkipReview
 } from './review.utils';
-import { last } from 'lodash';
-import { MergeRequestReview } from '../database/schemas/merge-request-review.schema';
-import { formatDiffs, validateAndCorrectLineNumbers } from './line-number.utils';
 import { ParsedPullRequestReviewData, ParsedPushReviewData } from '../git/interfaces/review.interface';
 
 @Injectable()
@@ -31,7 +35,8 @@ export class ReviewService {
     private configService: ConfigService,
     private databaseService: DatabaseService,
     private llmFactory: LLMFactory,
-    private integrationService: IntegrationService
+    private integrationService: IntegrationService,
+    private assetsLoaderService: AssetsLoaderService
   ) { }
 
   private isPullRequestChanged(
@@ -42,7 +47,9 @@ export class ReviewService {
       return true;
     }
     const currentCommits = pullRequestInfo.commits.map((commit) => commit.id);
-    const lastReviewedCommit = last(existingReview?.reviewRecords)?.lastCommitId;
+    const lastReviewedCommit = last(
+      existingReview?.reviewRecords,
+    )?.lastCommitId;
     return last(currentCommits) !== lastReviewedCommit;
   }
 
@@ -162,9 +169,7 @@ export class ReviewService {
 
       // 生成代码审查
       let changeCommits = pullRequestInfo.commits;
-
       let changeFiles: FileChange[] = pullRequestInfo.files;
-
       let references: string[] = [];
 
       if (existingReview && existingReview.reviewRecords.length > 0) {
@@ -185,10 +190,22 @@ export class ReviewService {
         ];
       }
 
+      // 加载项目参考文档
+      const loadedReferences = await this.loadProjectReferences(
+        projectConfig,
+        gitClient,
+        requestDto.owner,
+        requestDto.repo,
+        requestDto.sourceBranch,
+      );
+
+      // 合并历史references和配置的references
+      const allReferences = [...references, ...loadedReferences];
+
       const reviewResult = await this.generateCodeReview(
         changeFiles,
         changeCommits.map((commit) => commit.message).join('; '),
-        references,
+        allReferences,
         projectConfig,
         {
           llmProvider: requestDto.llmProvider,
@@ -246,8 +263,8 @@ export class ReviewService {
 
       const lineComments = validateAndCorrectLineNumbers(
         reviewResult.lineComments,
-        changeFiles
-      ).map(comment => ({
+        changeFiles,
+      ).map((comment) => ({
         path: comment.file,
         line: comment.line,
         body: comment.comment,
@@ -346,6 +363,15 @@ export class ReviewService {
         return;
       }
 
+      // 加载项目参考文档
+      const loadedReferences = await this.loadProjectReferences(
+        projectConfig,
+        gitClient,
+        requestDto.owner,
+        requestDto.repo,
+        requestDto.branch,
+      );
+
       // 生成代码审查
       const commitMessages = pushInfo.commits
         .map((commit) => commit.message)
@@ -353,7 +379,7 @@ export class ReviewService {
       const reviewResult = await this.generateCodeReview(
         pushInfo.files,
         commitMessages,
-        [],
+        loadedReferences,
         projectConfig,
         {
           llmProvider: requestDto.llmProvider,
@@ -399,4 +425,23 @@ export class ReviewService {
     }
   }
 
+  /**
+   * 加载项目参考文档
+   */
+  private async loadProjectReferences(
+    projectConfig: ProjectConfig,
+    gitClient: GitClientInterface,
+    owner: string,
+    repo: string,
+    ref: string,
+  ): Promise<string[]> {
+    // 加载配置的references内容
+    return await this.assetsLoaderService.loadReferences(
+      projectConfig.references || [],
+      gitClient,
+      owner,
+      repo,
+      ref,
+    );
+  }
 }
