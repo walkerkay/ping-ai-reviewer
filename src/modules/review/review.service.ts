@@ -94,10 +94,10 @@ export class ReviewService {
     config: ProjectConfig,
     options?: {
       llmProvider?: string;
-      llmApiKey?: string;
+      llmProviderApiKey?: string;
     }
   ): Promise<LLMReviewResult> {
-    const llmClient = this.llmFactory.getClient(options?.llmProvider, options?.llmApiKey);
+    const llmClient = this.llmFactory.getClient(options?.llmProvider, options?.llmProviderApiKey);
 
     const diff = formatDiffs(changes);
 
@@ -287,7 +287,6 @@ export class ReviewService {
           lineComments,
         );
       }
-
 
       // 添加评论
       await gitClient.createPullRequestComment(

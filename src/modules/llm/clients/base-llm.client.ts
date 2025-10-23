@@ -32,7 +32,7 @@ export abstract class BaseLLMClient implements LLMClient {
   abstract generateReport(commits: any[]): Promise<string>;
 
   protected getApiKey(): string {
-    return this.configService.get<string>(
+    return this.providerApiKey || this.configService.get<string>(
       `${this.provider.toUpperCase()}_API_KEY`,
     );
   }

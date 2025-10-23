@@ -12,14 +12,14 @@ export class DeepSeekClient extends BaseLLMClient {
   constructor(
     configService: ConfigService,
     private httpService: HttpService,
-    providerApiKey: string,
+    providerApiKey?: string,
   ) {
     super(configService, 'deepseek', providerApiKey);
   }
 
   protected getConfig(): LLMConfig {
     return {
-      apiKey: this.providerApiKey || this.getApiKey(),
+      apiKey: this.getApiKey(),
       baseUrl: 'https://api.deepseek.com/v1',
       model: 'deepseek-coder',
       temperature: 0.7,

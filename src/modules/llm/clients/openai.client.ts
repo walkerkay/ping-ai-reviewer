@@ -10,7 +10,7 @@ export class OpenAIClient extends BaseLLMClient {
   constructor(
     configService: ConfigService,
     private httpService: HttpService,
-    providerApiKey: string,
+    providerApiKey?: string,
   ) {
     super(configService, 'openai', providerApiKey);
   }
