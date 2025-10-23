@@ -40,10 +40,4 @@ integrations:
         审查人: AI CodeReviewer
 
     push_summary:
-      summary_field: ai_review_summary
-      template: |
-        🚀 代码审查完成
-        状态: {{ status }}
-        问题数: {{ issues }}
-        严重问题: {{ critical }}
-        审查人: AI CodeReviewer
+      summary_field: description
