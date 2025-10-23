@@ -58,12 +58,19 @@ export class PingCodeClient extends BaseIntegrationClient<ProjectIntegrationConf
       const workItemId = await this.getWorkItemId(workItemIdentifier, token);
 
       if (workItemId) {
+        summary = `🤖 ${summary}`;
         const response = await firstValueFrom(
           this.httpService.patch(
             `${this.apiUrl}/v1/project/work_items/${workItemId}`,
             {
               [field]: summary,
               [`properties.${field}`]: summary,
+            },
+            {
+              headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json',
+              },
             },
           ),
         );
@@ -139,8 +146,7 @@ export class PingCodeClient extends BaseIntegrationClient<ProjectIntegrationConf
     let content = '';
 
     if (message.additions?.pullRequest?.title) {
-      content += `
-      🚀 代码审查完\n\nURL: ${message.additions?.pullRequest?.url}\n`;
+      content += `🤖 代码审查完成\nURL: ${message.additions?.pullRequest?.url}\n`;
     }
     content += message.content;
 
