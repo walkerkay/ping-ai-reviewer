@@ -1,13 +1,21 @@
+import { HttpModule } from '@nestjs/axios';
 import { Module } from '@nestjs/common';
-import { ReviewService } from './review.service';
+import { AssetsLoaderService } from '../core/utils/assets-loader.service';
 import { DatabaseModule } from '../database/database.module';
-import { LlmModule } from '../llm/llm.module';
-import { IntegrationModule } from '../integration/integration.module';
 import { GitModule } from '../git/git.module';
+import { IntegrationModule } from '../integration/integration.module';
+import { LlmModule } from '../llm/llm.module';
+import { ReviewService } from './review.service';
 
 @Module({
-  imports: [DatabaseModule, LlmModule, IntegrationModule, GitModule],
-  providers: [ReviewService],
+  imports: [
+    HttpModule,
+    DatabaseModule,
+    LlmModule,
+    IntegrationModule,
+    GitModule,
+  ],
+  providers: [ReviewService, AssetsLoaderService],
   exports: [ReviewService],
 })
 export class ReviewModule {}
