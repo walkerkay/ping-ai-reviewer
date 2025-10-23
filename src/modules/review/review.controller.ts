@@ -8,10 +8,8 @@ import { GitFactory } from '../git/git.factory';
 export class ReviewController {
   constructor(private readonly reviewService: ReviewService, private gitFactory: GitFactory,) { }
 
-
-
   @Post('/:clientType/review')
-  async ReviewCode(@Param() params: { clientType: GitClientType; }, @Body() body: ReviewRequestDto) {
+  async handleCodeReview(@Param() params: { clientType: GitClientType; }, @Body() body: ReviewRequestDto) {
     const { eventType } = body;
     const gitClient = this.gitFactory.createGitClient(params.clientType, body.token);
     if (eventType === 'pull_request') {
@@ -23,7 +21,7 @@ export class ReviewController {
         mrState: body.mrState,
         projectName: body.projectName,
         eventType: body.eventType,
-        commitId: body.commitSha,
+        commitId: body.commitId,
         repo: body.repo,
         llmProvider: body.llmProvider,
         llmProviderApiKey: body.llmProviderApiKey,
@@ -34,7 +32,7 @@ export class ReviewController {
         owner: body.owner,
         projectName: body.projectName,
         eventType: body.eventType,
-        commitId: body.commitSha,
+        commitId: body.commitId,
         repo: body.repo,
         llmProvider: body.llmProvider,
         llmProviderApiKey: body.llmProviderApiKey,

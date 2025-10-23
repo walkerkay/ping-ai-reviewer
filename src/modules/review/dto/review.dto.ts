@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsString, IsOptional } from "class-validator";
+import { IsNotEmpty, IsString, IsOptional, IsNumber } from "class-validator";
 
 export class ReviewRequestDto {
     @IsString()
@@ -10,6 +10,7 @@ export class ReviewRequestDto {
     owner?: string;
 
     @IsNotEmpty()
+    @IsNumber()
     mrNumber: number;
 
     @IsNotEmpty()
@@ -43,7 +44,7 @@ export class ReviewRequestDto {
 
     @IsString()
     @IsOptional()
-    commitSha?: string;
+    commitId?: string;
 
     @IsString()
     @IsNotEmpty()
