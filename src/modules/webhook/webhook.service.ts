@@ -3,13 +3,14 @@ import { GitFactory } from '../git/git.factory';
 import { GitClientType } from '../git/interfaces/git-client.interface';
 import { ReviewService } from '../review/review.service';
 import { logger } from '../core/logger';
+import { ParsedPullRequestReviewData, ParsedPushReviewData } from '../git/interfaces/review.interface';
 
 @Injectable()
 export class WebhookService {
   constructor(
     private gitFactory: GitFactory,
     private reviewService: ReviewService,
-  ) {}
+  ) { }
 
   async handleGitLabWebhook(webhookData: any): Promise<{ message: string }> {
     try {
@@ -24,16 +25,16 @@ export class WebhookService {
 
       if (
         parsedData.eventType === 'pull_request' &&
-        ['opened', 'reopened', 'synchronize', 'ready_for_review','open'].includes(
-          parsedData.state,
+        ['opened', 'reopened', 'synchronize', 'ready_for_review', 'open'].includes(
+          (parsedData as ParsedPullRequestReviewData).mrState,
         )
       ) {
-        await this.reviewService.handlePullRequestFromWebHooks(gitlabClient, parsedData);
+        await this.reviewService.handlePullRequest(gitlabClient, parsedData as unknown as ParsedPullRequestReviewData);
         return {
           message: 'GitLab merge request event processed asynchronously',
         };
       } else if (parsedData.eventType === 'push') {
-        await this.reviewService.handlePushFromWebHooks(gitlabClient, parsedData);
+        await this.reviewService.handlePush(gitlabClient, parsedData as unknown as ParsedPushReviewData);
         return { message: 'GitLab push event processed asynchronously' };
       }
 
@@ -61,15 +62,15 @@ export class WebhookService {
       if (
         parsedData.eventType === 'pull_request' &&
         ['open', 'update', 'reopen', 'unmarked_as_draft'].includes(
-          parsedData.state,
+          (parsedData as ParsedPullRequestReviewData).mrState,
         )
       ) {
-        await this.reviewService.handlePullRequestFromWebHooks(githubClient, parsedData);
+        await this.reviewService.handlePullRequest(githubClient, parsedData as unknown as ParsedPullRequestReviewData);
         return {
           message: 'GitHub pull request event processed asynchronously',
         };
       } else if (parsedData.eventType === 'push') {
-        await this.reviewService.handlePushFromWebHooks(githubClient, parsedData);
+        await this.reviewService.handlePush(githubClient, parsedData as unknown as ParsedPushReviewData);
         return { message: 'GitHub push event processed asynchronously' };
       }
 

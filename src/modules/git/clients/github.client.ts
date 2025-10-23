@@ -7,11 +7,11 @@ import {
   PushInfo,
   FileChange,
   CommitInfo,
-  ParsedWebhookData,
 } from '../interfaces/git-client.interface';
 import { GitHubWebhookDto } from '../../webhook/dto/webhook.dto';
 import { Octokit } from '@octokit/rest';
 import { logger } from '../../core/logger';
+import { ParsedPullRequestReviewData, ParsedPushReviewData } from '../interfaces/review.interface';
 
 @Injectable()
 export class GitHubClient extends BaseGitClient {
@@ -257,63 +257,49 @@ export class GitHubClient extends BaseGitClient {
 
   private parsePullRequestEvent(
     webhookData: GitHubWebhookDto,
-  ): ParsedWebhookData {
+  ): ParsedPullRequestReviewData {
     const pullRequest = webhookData.pull_request || {};
     const repository = webhookData.repository || {};
     const owner = repository.owner?.login || '';
     const repo = repository.name || '';
-
+    const commits = webhookData.commits || [];
+    const commitId = commits.length > 0 ? commits[commits.length - 1].id : "";
     return {
-      clientType: GitClientType.GITHUB,
-      eventType: 'pull_request',
       owner,
       repo,
-      pullNumber: pullRequest.number,
+      mrNumber: pullRequest.number,
       projectName: repository.full_name,
-      author: pullRequest.user?.login || '',
       sourceBranch: pullRequest.head?.ref,
       targetBranch: pullRequest.base?.ref,
-      url: pullRequest.html_url,
-      commits: [], // 将在后续获取
-      webhookData,
-      state: pullRequest.state,
+      mrState: pullRequest.state,
+      commitId: commitId,
+      eventType: 'pull_request'
     };
   }
 
-  private parsePushEvent(webhookData: GitHubWebhookDto): ParsedWebhookData {
+  private parsePushEvent(webhookData: GitHubWebhookDto): ParsedPushReviewData {
     const repository = webhookData.repository || {};
     const ref = webhookData.ref || '';
     const branchName = ref.replace('refs/heads/', '');
     const commits = webhookData.commits || [];
     const owner = repository.owner?.login || '';
     const repo = repository.name || '';
+    const commitId = commits.length > 0 ? commits[commits.length - 1].id : "";
 
     return {
-      clientType: GitClientType.GITHUB,
-      eventType: 'push',
       owner,
       repo,
       projectName: repository.full_name,
-      author:
-        (webhookData as any).pusher?.name ||
-        commits[0]?.author?.name ||
-        'unknown',
-      branchName,
-      url: repository.html_url,
-      commits: commits.map((commit) => ({
-        id: commit.id,
-        message: commit.message,
-        author: commit.author?.name || 'unknown',
-        timestamp: commit.timestamp,
-      })),
-      webhookData,
+      branch: branchName,
+      commitId: commitId,
+      eventType: 'push'
     };
   }
 
   parseWebhookData(
     webhookData: GitHubWebhookDto,
     eventType: string,
-  ): ParsedWebhookData | null {
+  ): ParsedPullRequestReviewData | ParsedPushReviewData | null{
     if (eventType === 'pull_request') {
       return this.parsePullRequestEvent(webhookData);
     } else if (eventType === 'push') {

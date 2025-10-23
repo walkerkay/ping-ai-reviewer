@@ -1,0 +1,80 @@
+name: 直接调用 AI 审查 API
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+  workflow_dispatch:
+
+jobs:
+  call-ai-review-api:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 1. 调用 AI 审查 API
+        env:
+          LLM_PROVIDER: ${{ secrets.LLM_PROVIDER }}
+          LLM_PROVIDER_API_KEY: ${{ secrets.LLM_PROVIDER_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+          # 2. 修复 API_URL 表达式（GitHub Actions 不支持 ||，用 coalesce 函数）
+          API_URL: ${{ secrets.PING_AI_REVIEWER_API_URL || 'https://ping-ai-reviewer.vercel.app/review/github/review' }}
+
+          # 3. 从 GitHub 上下文提取参数（保留原生逻辑）
+          REPO: ${{ github.repository_name }}
+          OWNER: ${{ github.repository_owner }}
+          PR_NUMBER: ${{ github.event.pull_request.number || null }}
+          PR_STATE: ${{ github.event.pull_request.state || null }}
+          SOURCE_BRANCH: ${{ github.event.pull_request.head.ref || null }}
+          TARGET_BRANCH: ${{ github.event.pull_request.base.ref || null }}
+          COMMIT_SHA: ${{ github.sha }}
+          EVENT_TYPE: ${{ github.event_name }}
+          PROJECT_ID: ${{ github.repository_id }}
+          PROJECT_NAME: ${{ github.repository_name }}
+        run: |
+          # 1. 给空变量兜底（用 GitHub 事件上下文，比固定值更灵活）
+          # 优先用 event.repository.name（pull_request 事件必存在），兜底为固定值
+          REPO=${REPO:-${{ github.event.repository.name }}}
+          PROJECT_NAME=${PROJECT_NAME:-${{ github.event.repository.name }}}
+
+          # 2. jq 组装请求体（确保 \ 在每行末尾，无空格/隐藏字符）
+          REQUEST_BODY=$(jq -n \
+            --arg repo "$REPO" \
+            --argjson mrNumber "$PR_NUMBER" \
+            --arg commitSha "$COMMIT_SHA" \
+            --arg eventType "$EVENT_TYPE" \
+            --arg token "$GITHUB_TOKEN" \
+            --arg mrState "$PR_STATE" \
+            --arg projectId "$PROJECT_ID" \
+            --arg projectName "$PROJECT_NAME" \
+            --arg owner "$OWNER" \
+            --arg sourceBranch "$SOURCE_BRANCH" \
+            --arg targetBranch "$TARGET_BRANCH" \
+            --arg llmProvider "$LLM_PROVIDER" \
+            --arg llmProviderApiKey "$LLM_PROVIDER_API_KEY" \
+            '{
+              "repo": $repo,
+              "mrNumber": $mrNumber,
+              "commitSha": $commitSha,
+              "eventType": $eventType,
+              "token": $token,
+              "mrState": $mrState,
+              "projectId": $projectId,
+              "projectName": $projectName,
+              "owner": $owner,
+              "sourceBranch": $sourceBranch,
+              "targetBranch": $targetBranch,
+              "llmProvider": $llmProvider,
+              "llmProviderApiKey": $llmProviderApiKey
+            }')
+
+          # 3. 打印脱敏请求体（加双引号避免 JSON 格式错乱）
+          echo "请求体（已脱敏）："
+          echo "$REQUEST_BODY" | jq '.token = "***" | .llmProviderApiKey = "***"'
+
+          # 4. curl 发送请求
+          curl -X POST \
+            -H "Content-Type: application/json" \
+            -H "User-Agent: Ping-AI-Reviewer-Workflow" \
+            -d "$REQUEST_BODY" \
+            -sS -f \
+            "$API_URL" \
+            && echo -e "\n✅ API 调用成功！" \
+            || (echo -e "\n❌ API 调用失败" && exit 1)
