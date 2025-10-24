@@ -1,23 +1,28 @@
-name: 直接调用 AI 审查 API
+name: AI CodeReview
 on:
   pull_request:
     types: [opened, reopened, synchronize, ready_for_review]
   workflow_dispatch:
 
+permissions:
+  pull-requests: write  
+  contents: read
+  issues: write
+
 jobs:
-  call-ai-review-api:
+  run-ai-review:
     runs-on: ubuntu-latest
     steps:
-      - name: 1. 调用 AI 审查 API
+      - name: run-ai-review
         env:
           LLM_PROVIDER: ${{ secrets.LLM_PROVIDER }}
           LLM_PROVIDER_API_KEY: ${{ secrets.LLM_PROVIDER_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-          # 2. 修复 API_URL 表达式（GitHub Actions 不支持 ||，用 coalesce 函数）
+          # 2. 修复 API_URL 表达式
           API_URL: ${{ secrets.PING_AI_REVIEWER_API_URL || 'https://ping-ai-reviewer.vercel.app/review/github/review' }}
 
-          # 3. 从 GitHub 上下文提取参数（保留原生逻辑）
+          # 3. 从 GitHub 上下文提取参数
           REPO: ${{ github.repository_name }}
           OWNER: ${{ github.repository_owner }}
           PR_NUMBER: ${{ github.event.pull_request.number || null }}
