@@ -19,10 +19,10 @@ jobs:
           LLM_PROVIDER_API_KEY: ${{ secrets.LLM_PROVIDER_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-          # 2. 修复 API_URL 表达式（GitHub Actions 不支持 ||，用 coalesce 函数）
+          # 2. 修复 API_URL 表达式
           API_URL: ${{ secrets.PING_AI_REVIEWER_API_URL || 'https://ping-ai-reviewer.vercel.app/review/github/review' }}
 
-          # 3. 从 GitHub 上下文提取参数（保留原生逻辑）
+          # 3. 从 GitHub 上下文提取参数
           REPO: ${{ github.repository_name }}
           OWNER: ${{ github.repository_owner }}
           PR_NUMBER: ${{ github.event.pull_request.number || null }}
