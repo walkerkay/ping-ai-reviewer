@@ -19,7 +19,7 @@ const defaultNotificationTemplate = `
 
 export function outroPrompt(
   language: string,
-  max_review_length: number,
+  max_output_tokens: number,
 ): string {
   return `
   重要约束：
@@ -27,7 +27,7 @@ export function outroPrompt(
   2. 请返回 JSON 格式数据，严格遵循示例格式 ${JSON.stringify(outputExample)}
   3. overview 是针对提交代码实现的总结，不需要包含审查意见，尽量简洁明了，只有具有实际业务的更改才需要输出，否则可为空
   4. lineComments 是行级评论，只有存在必要修改的意见需要生成行级评论，如已修改的问题可忽略，必须包含 file、line、comment，不要输出其他字段、示例值或多余文字
-  5. 优先使用行级评论进行具体问题定位，detailComment 用于总结和补充说明，可用 markdown 格式，长度不超过 ${max_review_length} 字符
+  5. 优先使用行级评论进行具体问题定位，detailComment 用于总结和补充说明，可用 markdown 格式，长度不超过 ${Math.floor(max_output_tokens * 0.6)} 字符
   6. 参考信息用于辅助检查，如果存在上次审查结论，需要结合上次审查结论进行检查
   7. notification， 是用于是通知推送内容，参考以下模板，纯文本可包含换行符，示例：${defaultNotificationTemplate}
   8. 合理使用相关Emoji,不要过度使用
