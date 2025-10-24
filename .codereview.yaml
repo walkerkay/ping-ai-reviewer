@@ -3,8 +3,8 @@ review:
   enabled: true
   language: zh
   mode: light
-  max_output_tokens: 2000
-  max_input_tokens: 8000
+  max_output_tokens: 5000
+  max_input_tokens: 50000
   max_files: 30
 files:
   extensions:
