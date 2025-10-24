@@ -27,7 +27,10 @@ import {
   shouldTriggerReview,
   slugifyUrl,
 } from './review.utils';
-import { ParsedPullRequestReviewData, ParsedPushReviewData } from '../git/interfaces/review.interface';
+import {
+  ParsedPullRequestReviewData,
+  ParsedPushReviewData,
+} from '../git/interfaces/review.interface';
 
 @Injectable()
 export class ReviewService {
@@ -36,8 +39,8 @@ export class ReviewService {
     private databaseService: DatabaseService,
     private llmFactory: LLMFactory,
     private integrationService: IntegrationService,
-    private assetsLoaderService: AssetsLoaderService
-  ) { }
+    private assetsLoaderService: AssetsLoaderService,
+  ) {}
 
   private isPullRequestChanged(
     pullRequestInfo: PullRequestInfo,
@@ -70,7 +73,7 @@ export class ReviewService {
 
   async handlePullRequest(
     gitClient: GitClientInterface,
-    requestDto: ParsedPullRequestReviewData
+    requestDto: ParsedPullRequestReviewData,
   ): Promise<void> {
     try {
       const pullRequestInfo = await gitClient.getPullRequestInfo(
@@ -165,7 +168,7 @@ export class ReviewService {
         {
           llmProvider: requestDto.llmProvider,
           llmProviderApiKey: requestDto.llmProviderApiKey,
-        }
+        },
       );
 
       // 创建或更新review记录
@@ -182,6 +185,7 @@ export class ReviewService {
             .join('; '),
           reviewResult.detailComment,
         ].join('\n\n'),
+        summary: reviewResult.overview,
       };
 
       // 如果是首次review，创建新记录；否则添加review记录
@@ -250,10 +254,15 @@ export class ReviewService {
         projectConfig,
       );
 
+      const summary = [...(existingReview?.reviewRecords ?? []), reviewRecord]
+        .filter((record) => record.summary)
+        .map((record) => `• ${record.summary}`)
+        .join('\n\n');
+
       // 推送总结到集成
       await this.pushSummaryToIntegration(
         pullRequestInfo,
-        reviewResult.overview,
+        summary,
         projectConfig,
       );
     } catch (error) {
@@ -267,7 +276,8 @@ export class ReviewService {
 
   async handlePush(
     gitClient: GitClientInterface,
-    requestDto: ParsedPushReviewData): Promise<void> {
+    requestDto: ParsedPushReviewData,
+  ): Promise<void> {
     try {
       const pushReviewEnabled =
         this.configService.get<string>('PUSH_REVIEW_ENABLED') === '1';
@@ -346,7 +356,7 @@ export class ReviewService {
         {
           llmProvider: requestDto.llmProvider,
           llmProviderApiKey: requestDto.llmProviderApiKey,
-        }
+        },
       );
 
       // 保存到数据库
@@ -415,9 +425,12 @@ export class ReviewService {
     options?: {
       llmProvider?: string;
       llmProviderApiKey?: string;
-    }
+    },
   ): Promise<LLMReviewResult> {
-    const llmClient = this.llmFactory.getClient(options?.llmProvider, options?.llmProviderApiKey);
+    const llmClient = this.llmFactory.getClient(
+      options?.llmProvider,
+      options?.llmProviderApiKey,
+    );
 
     const diff = formatDiffs(changes);
 
