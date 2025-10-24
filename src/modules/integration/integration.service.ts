@@ -50,4 +50,26 @@ export class IntegrationService {
       }),
     );
   }
+
+  async pushSummary(
+    prTitle: string,
+    summary: string,
+    config: ProjectConfig['integrations'],
+  ): Promise<void> {
+    await Promise.allSettled(
+      Object.entries(config).map(async ([type, integrationConfig]) => {
+        const client = this.createClient(
+          type as IntegrationClientType,
+          integrationConfig,
+        );
+        if (client.isEnabled() && integrationConfig.push_summary?.summary_field) {
+          await client.pushSummary?.(
+            prTitle,
+            integrationConfig.push_summary?.summary_field,
+            summary,
+          );
+        }
+      }),
+    );
+  }
 }

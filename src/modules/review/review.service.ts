@@ -68,51 +68,6 @@ export class ReviewService {
     return config;
   }
 
-  private async generateCodeReview(
-    changes: FileChange[],
-    commitMessages: string,
-    references: string[],
-    config: ProjectConfig,
-    options?: {
-      llmProvider?: string;
-      llmProviderApiKey?: string;
-    }
-  ): Promise<LLMReviewResult> {
-    const llmClient = this.llmFactory.getClient(options?.llmProvider, options?.llmProviderApiKey);
-
-    const diff = formatDiffs(changes);
-
-    return await llmClient.generateReview(diff, commitMessages, references, config);
-  }
-
-  private async sendReviewNotification(
-    reviewResult: LLMReviewResult,
-    projectName: string,
-    pullRequestInfo: PullRequestInfo | null,
-    projectConfig: ProjectConfig,
-  ): Promise<void> {
-    if (!reviewResult.notification) {
-      return;
-    }
-    await this.integrationService.sendNotification(
-      {
-        content: reviewResult.notification,
-        title: `PingReviewer - ${projectName}`,
-        msgType: 'text',
-        additions: pullRequestInfo
-          ? {
-            pullRequest: {
-              title: pullRequestInfo.title,
-              url: pullRequestInfo.url,
-            },
-          }
-          : undefined,
-      },
-      projectConfig.integrations,
-    );
-  }
-
-
   async handlePullRequest(
     gitClient: GitClientInterface,
     requestDto: ParsedPullRequestReviewData
@@ -294,6 +249,13 @@ export class ReviewService {
         pullRequestInfo,
         projectConfig,
       );
+
+      // 推送总结到集成
+      await this.pushSummaryToIntegration(
+        pullRequestInfo,
+        reviewResult.overview,
+        projectConfig,
+      );
     } catch (error) {
       logger.error(
         'Pull request review failed:',
@@ -442,6 +404,70 @@ export class ReviewService {
       owner,
       repo,
       ref,
+    );
+  }
+
+  private async generateCodeReview(
+    changes: FileChange[],
+    commitMessages: string,
+    references: string[],
+    config: ProjectConfig,
+    options?: {
+      llmProvider?: string;
+      llmProviderApiKey?: string;
+    }
+  ): Promise<LLMReviewResult> {
+    const llmClient = this.llmFactory.getClient(options?.llmProvider, options?.llmProviderApiKey);
+
+    const diff = formatDiffs(changes);
+
+    return await llmClient.generateReview(
+      diff,
+      commitMessages,
+      references,
+      config,
+    );
+  }
+
+  private async sendReviewNotification(
+    reviewResult: LLMReviewResult,
+    projectName: string,
+    pullRequestInfo: PullRequestInfo | null,
+    projectConfig: ProjectConfig,
+  ): Promise<void> {
+    if (!reviewResult.notification) {
+      return;
+    }
+    await this.integrationService.sendNotification(
+      {
+        content: reviewResult.notification,
+        title: `PingReviewer - ${projectName}`,
+        msgType: 'text',
+        additions: pullRequestInfo
+          ? {
+              pullRequest: {
+                title: pullRequestInfo.title,
+                url: pullRequestInfo.url,
+              },
+            }
+          : undefined,
+      },
+      projectConfig.integrations,
+    );
+  }
+
+  private async pushSummaryToIntegration(
+    pullRequestInfo: PullRequestInfo | null,
+    summary: string,
+    projectConfig: ProjectConfig,
+  ): Promise<void> {
+    if (!summary) {
+      return;
+    }
+    await this.integrationService.pushSummary(
+      pullRequestInfo?.title,
+      summary,
+      projectConfig.integrations,
     );
   }
 }
