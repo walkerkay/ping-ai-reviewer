@@ -256,8 +256,8 @@ export class ReviewService {
 
       const summary = [...(existingReview?.reviewRecords ?? []), reviewRecord]
         .filter((record) => record.summary)
-        .map((record) => `• ${record.summary}`)
-        .join('\n\n');
+        .map((record) => `${record.summary}`)
+        .join('\n');
 
       // 推送总结到集成
       await this.pushSummaryToIntegration(
