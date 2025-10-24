@@ -1,14 +1,14 @@
-name: 直接调用 AI 审查 API
+name: AI CodeReview
 on:
   pull_request:
     types: [opened, reopened, synchronize, ready_for_review]
   workflow_dispatch:
 
 jobs:
-  call-ai-review-api:
+  run-ai-review:
     runs-on: ubuntu-latest
     steps:
-      - name: 1. 调用 AI 审查 API
+      - name: run-ai-review
         env:
           LLM_PROVIDER: ${{ secrets.LLM_PROVIDER }}
           LLM_PROVIDER_API_KEY: ${{ secrets.LLM_PROVIDER_API_KEY }}
