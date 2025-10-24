@@ -299,11 +299,8 @@ export class AppService {
         </div>
         
         <div class="links">
-            <a href="https://github.com/sunmh207/AI-Codereview-Gitlab" target="_blank" class="btn github">
+            <a href="https://github.com/walkerkay/ping-ai-reviewer" target="_blank" class="btn github">
                 📁 GitHub 仓库
-            </a>
-            <a href="https://gitee.com/sunminghui/ai-codereview-gitlab" target="_blank" class="btn gitee">
-                📁 Gitee 仓库
             </a>
             <a href="/health" class="btn">
                 🔍 健康检查

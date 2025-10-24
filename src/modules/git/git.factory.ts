@@ -18,12 +18,12 @@ export class GitFactory {
    * @param type Git 客户端类型
    * @returns Git 客户端实例
    */
-  createGitClient(type: GitClientType): GitClientInterface {
+  createGitClient(type: GitClientType, accessToken?: string): GitClientInterface {
     switch (type) {
       case GitClientType.GITHUB:
-        return new GitHubClient(this.configService);
+        return new GitHubClient(this.configService, accessToken);
       case GitClientType.GITLAB:
-        return new GitLabClient(this.configService);
+        return new GitLabClient(this.configService, accessToken);
       default:
         throw new Error(`Unsupported Git client type: ${type}`);
     }

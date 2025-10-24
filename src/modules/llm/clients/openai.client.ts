@@ -11,8 +11,9 @@ export class OpenAIClient extends BaseLLMClient {
   constructor(
     configService: ConfigService,
     private httpService: HttpService,
+    providerApiKey?: string,
   ) {
-    super(configService, 'openai');
+    super(configService, 'openai', providerApiKey);
   }
 
   protected getConfig(): LLMConfig {

@@ -6,21 +6,21 @@ import {
   PullRequestInfo,
   PushInfo,
   FileChange,
-  CommitInfo,
-  ParsedWebhookData,
+  CommitInfo
 } from '../interfaces/git-client.interface';
 import { GitLabWebhookDto } from '../../webhook/dto/webhook.dto';
 import { DiffRefsSchema, Gitlab } from '@gitbeaker/rest';
 import { logger } from '../../core/logger';
+import { ParsedPullRequestReviewData, ParsedPushReviewData } from '../interfaces/review.interface';
 
 @Injectable()
 export class GitLabClient extends BaseGitClient {
 
   private gitlab: InstanceType<typeof Gitlab>;
 
-  protected initializeConfig(): GitClientConfig {
+  protected initializeConfig(accessToken?: string): GitClientConfig {
     const config = {
-      token: this.configService.get<string>('GITLAB_ACCESS_TOKEN'),
+      token: accessToken || this.configService.get<string>('GITLAB_ACCESS_TOKEN'),
       url: this.configService.get<string>('GITLAB_URL', 'https://gitlab.com'),
       type: GitClientType.GITLAB,
     };
@@ -177,7 +177,7 @@ export class GitLabClient extends BaseGitClient {
     try {
       // 支持单个或多个 commitSha
       const commitShas = Array.isArray(commitSha) ? commitSha : [commitSha];
-      
+
       // 并行获取所有 commit 的文件修改
       const commitFilesPromises = commitShas.map(async (sha) => {
         try {
@@ -190,7 +190,7 @@ export class GitLabClient extends BaseGitClient {
       });
 
       const allCommitFiles = await Promise.all(commitFilesPromises);
-      
+
       // 合并所有文件修改
       return this.mergeFileChanges(allCommitFiles.flat());
     } catch (error) {
@@ -342,7 +342,7 @@ export class GitLabClient extends BaseGitClient {
   parseWebhookData(
     webhookData: GitLabWebhookDto,
     eventType?: string,
-  ): ParsedWebhookData | null {
+  ): ParsedPullRequestReviewData | ParsedPushReviewData | null {
     const objectKind = webhookData.object_kind;
 
     if (objectKind === 'merge_request') {
@@ -356,55 +356,35 @@ export class GitLabClient extends BaseGitClient {
 
   private parseMergeRequestEvent(
     webhookData: GitLabWebhookDto,
-  ): ParsedWebhookData {
+  ): ParsedPullRequestReviewData {
     const objectAttributes = webhookData.object_attributes || {};
     const project = webhookData.project || {};
 
     return {
-      clientType: GitClientType.GITLAB,
       eventType: 'pull_request',
       owner: project.path_with_namespace?.split('/')[0] || '',
-      projectId: project.id?.toString() || '',
       repo: project.id?.toString() || '',
-      mergeRequestIid: objectAttributes.iid,
       projectName: project.name,
-      author:
-        objectAttributes.author?.name ||
-        objectAttributes.last_commit?.author?.name ||
-        '',
       sourceBranch: objectAttributes.source_branch,
       targetBranch: objectAttributes.target_branch,
-      url: objectAttributes.url,
-      state: objectAttributes.action,
-      commits: [], // 将在后续获取
-      webhookData,
+      mrState: objectAttributes.action,
+      mrNumber: objectAttributes.iid,
     };
   }
 
-  private parsePushEvent(webhookData: GitLabWebhookDto): ParsedWebhookData {
+  private parsePushEvent(webhookData: GitLabWebhookDto): ParsedPushReviewData {
     const project = webhookData.project || {};
     const ref = webhookData.ref || '';
     const branchName = ref.replace('refs/heads/', '');
     const commits = webhookData.commits || [];
-
+    const commitSha = commits.length > 0 ? commits[commits.length - 1].id : '';
     return {
-      clientType: GitClientType.GITLAB,
       eventType: 'push',
       owner: project.path_with_namespace?.split('/')[0] || '',
-      projectId: project.id?.toString() || '',
       repo: project.id?.toString() || '',
       projectName: project.name,
-      author:
-        (webhookData as any).user_name || commits[0]?.author?.name || 'unknown',
-      branchName,
-      url: project.web_url,
-      commits: commits.map((commit) => ({
-        id: commit.id,
-        message: commit.message,
-        author: commit.author?.name || 'unknown',
-        timestamp: commit.timestamp,
-      })),
-      webhookData,
+      branch: branchName,
+      commitSha: commitSha
     };
   }
 }
