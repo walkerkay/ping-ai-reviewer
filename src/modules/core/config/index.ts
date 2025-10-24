@@ -9,9 +9,9 @@ const defaultConfig: ProjectConfig = {
     enabled: true,
     language: 'zh',
     mode: 'strict',
-    max_review_length: 4000,
-    max_files: 50,
-    max_content_length: 20000,
+    max_output_tokens: 2000,
+    max_input_tokens: 20000,
+    max_files: 30,
   },
   files: {
     extensions: [

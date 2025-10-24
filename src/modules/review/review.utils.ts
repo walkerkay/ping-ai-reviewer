@@ -127,11 +127,7 @@ export function checkReviewLimits<
     );
     return true;
   }
-  let totalContentLength: number = 0;
-  for (const file of files) {
-    totalContentLength += (file.patch || '').length;
-  }
-  return totalContentLength > config.max_content_length;
+  return false;
 }
 
 /**

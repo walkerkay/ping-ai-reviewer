@@ -2,6 +2,7 @@ import { systemPrompt } from './base/system';
 import { outroPrompt } from './base/outro';
 import { lightPrompt } from './modes/light';
 import { strictPrompt } from './modes/strict';
+import { LLMTokenCalculator } from '../utils/llm-token-calculator';
 
 type PromptMessage = { role: 'system' | 'user'; content: string };
 
@@ -12,26 +13,31 @@ export class PromptBuilder {
     references?: string[];
     language: 'zh' | 'en'; 
     mode: 'light' | 'strict';
-    max_review_length: number;
-  }): PromptMessage[] {
+    max_output_tokens: number;
+    max_input_tokens: number;
+  }): { messages: PromptMessage[] | null, inputTokens: number } {
+    const optimizedDiff = LLMTokenCalculator.optimizeText(payload.diff || '');
+    const optimizedCommitMessages = LLMTokenCalculator.optimizeText(payload.commitMessages || '');
+    const optimizedReferences = LLMTokenCalculator.optimizeReferences(payload.references || []);
+    
     const promptMessages = [{ role: 'system', content: systemPrompt() }];
 
     if (payload.mode === 'strict') {
       promptMessages.push({
         role: 'user',
         content: strictPrompt({
-          commitMessages: payload.commitMessages,
-          diff: payload.diff,
-          references: payload.references,
+          commitMessages: optimizedCommitMessages,
+          diff: optimizedDiff,
+          references: optimizedReferences,
         }),
       });
     } else {
       promptMessages.push({
         role: 'user',
         content: lightPrompt({
-          commitMessages: payload.commitMessages,
-          diff: payload.diff,
-          references: payload.references,
+          commitMessages: optimizedCommitMessages,
+          diff: optimizedDiff,
+          references: optimizedReferences,
         }),
       });
     }
@@ -40,10 +46,17 @@ export class PromptBuilder {
       role: 'user',
       content: outroPrompt(
         payload.language,
-        payload.max_review_length, 
+        payload.max_output_tokens, 
       ),
     });
 
-    return promptMessages as PromptMessage[];
+    const inputTokens = LLMTokenCalculator.calculatePromptTokens(promptMessages);
+    
+    if (inputTokens > payload.max_input_tokens) {
+      console.log(`Input tokens (${inputTokens}) exceeds limit (${payload.max_input_tokens}), skipping review`);
+      return { messages: null, inputTokens };
+    }
+
+    return { messages: promptMessages as PromptMessage[], inputTokens };
   }
 }
