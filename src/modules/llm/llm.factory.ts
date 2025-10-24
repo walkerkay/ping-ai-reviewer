@@ -12,14 +12,14 @@ export class LLMFactory {
     private httpService: HttpService,
   ) {}
 
-  getClient(provider?: string): LLMClient {
+  getClient(provider?: string, providerApiKey?: string): LLMClient {
     const llmProvider = provider || this.configService.get<string>('LLM_PROVIDER', 'deepseek');
     
     switch (llmProvider.toLowerCase()) {
       case 'deepseek':
-        return new DeepSeekClient(this.configService, this.httpService);
+        return new DeepSeekClient(this.configService, this.httpService, providerApiKey);
       case 'openai':
-        return new OpenAIClient(this.configService, this.httpService);
+        return new OpenAIClient(this.configService, this.httpService, providerApiKey);
       default:
         throw new Error(`Unknown LLM provider: ${llmProvider}`);
     }

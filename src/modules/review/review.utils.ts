@@ -5,7 +5,7 @@ import {
   ProjectReviewConfig,
   ProjectConfig,
 } from '../core/config/interfaces/config.interface';
-import { FileChange } from '../git/interfaces/git-client.interface';
+import { FileChange, GitClientType } from '../git/interfaces/git-client.interface';
 import { logger } from '../core/logger';
 
 /**

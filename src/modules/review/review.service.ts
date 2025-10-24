@@ -7,11 +7,9 @@ import { logger } from '../core/logger';
 import { AssetsLoaderService } from '../core/utils/assets-loader.service';
 import { DatabaseService } from '../database/database.service';
 import { MergeRequestReview } from '../database/schemas/merge-request-review.schema';
-import { GitFactory } from '../git/git.factory';
 import {
   FileChange,
   GitClientInterface,
-  ParsedWebhookData,
   PullRequestInfo,
 } from '../git/interfaces/git-client.interface';
 import { IntegrationService } from '../integration/integration.service';
@@ -29,6 +27,7 @@ import {
   shouldTriggerReview,
   slugifyUrl,
 } from './review.utils';
+import { ParsedPullRequestReviewData, ParsedPushReviewData } from '../git/interfaces/review.interface';
 
 @Injectable()
 export class ReviewService {
@@ -37,9 +36,8 @@ export class ReviewService {
     private databaseService: DatabaseService,
     private llmFactory: LLMFactory,
     private integrationService: IntegrationService,
-    private gitFactory: GitFactory,
-    private assetsLoaderService: AssetsLoaderService,
-  ) {}
+    private assetsLoaderService: AssetsLoaderService
+  ) { }
 
   private isPullRequestChanged(
     pullRequestInfo: PullRequestInfo,
@@ -55,21 +53,37 @@ export class ReviewService {
     return last(currentCommits) !== lastReviewedCommit;
   }
 
-  async handlePullRequest(parsedData: ParsedWebhookData): Promise<void> {
-    try {
-      const gitClient = this.getGitClient(parsedData);
+  private async getProjectConfig(
+    gitClient: GitClientInterface,
+    owner: string,
+    repo: string,
+    ref: string,
+  ): Promise<ProjectConfig> {
+    const [yamlConfig, ymlConfig] = await Promise.all([
+      gitClient.getContentAsText(owner, repo, '.codereview.yaml', ref),
+      gitClient.getContentAsText(owner, repo, '.codereview.yml', ref),
+    ]);
+    const configContent = yamlConfig || ymlConfig;
+    const config = parseConfig(configContent);
+    return config;
+  }
 
+  async handlePullRequest(
+    gitClient: GitClientInterface,
+    requestDto: ParsedPullRequestReviewData
+  ): Promise<void> {
+    try {
       const pullRequestInfo = await gitClient.getPullRequestInfo(
-        parsedData.owner,
-        parsedData.repo,
-        parsedData.pullNumber || parsedData.mergeRequestIid,
+        requestDto.owner,
+        requestDto.repo,
+        requestDto.mrNumber,
       );
 
       const projectConfig = await this.getProjectConfig(
         gitClient,
-        parsedData.owner,
-        parsedData.repo,
-        parsedData.sourceBranch,
+        requestDto.owner,
+        requestDto.repo,
+        requestDto.sourceBranch,
       );
 
       if (!projectConfig.review.enabled) {
@@ -83,7 +97,7 @@ export class ReviewService {
 
       const shouldSkip = await shouldSkipReview(projectConfig, {
         eventType: 'pull_request',
-        branchName: parsedData.targetBranch,
+        branchName: requestDto.targetBranch,
         files: pullRequestInfo.files,
         title: pullRequestInfo.title,
         isDraft: pullRequestInfo.isDraft,
@@ -122,8 +136,8 @@ export class ReviewService {
         );
         changeCommits = pullRequestInfo.commits.slice(lastReviewedIndex + 1);
         changeFiles = await gitClient.getCommitFiles(
-          parsedData.owner,
-          parsedData.repo,
+          requestDto.owner,
+          requestDto.repo,
           changeCommits.map((commit) => commit.id),
         );
         references = [
@@ -135,9 +149,9 @@ export class ReviewService {
       const loadedReferences = await this.loadProjectReferences(
         projectConfig,
         gitClient,
-        parsedData.owner,
-        parsedData.repo,
-        parsedData.sourceBranch,
+        requestDto.owner,
+        requestDto.repo,
+        requestDto.sourceBranch,
       );
 
       // 合并历史references和配置的references
@@ -148,6 +162,10 @@ export class ReviewService {
         changeCommits.map((commit) => commit.message).join('; '),
         allReferences,
         projectConfig,
+        {
+          llmProvider: requestDto.llmProvider,
+          llmProviderApiKey: requestDto.llmProviderApiKey,
+        }
       );
 
       // 创建或更新review记录
@@ -169,7 +187,7 @@ export class ReviewService {
       // 如果是首次review，创建新记录；否则添加review记录
       if (!existingReview) {
         await this.databaseService.createMergeRequestReview({
-          projectName: parsedData.projectName,
+          projectName: requestDto.projectName,
           author: pullRequestInfo.author,
           sourceBranch: pullRequestInfo.sourceBranch,
           targetBranch: pullRequestInfo.targetBranch,
@@ -196,7 +214,6 @@ export class ReviewService {
           reviewRecords: [...existingReview.reviewRecords, reviewRecord],
         });
       }
-
       // 添加行内评论
 
       const lineComments = validateAndCorrectLineNumbers(
@@ -208,17 +225,19 @@ export class ReviewService {
         body: comment.comment,
       }));
 
-      await gitClient.createPullRequestLineComments(
-        parsedData.owner,
-        parsedData.repo,
-        pullRequestInfo.number,
-        lineComments,
-      );
+      if (lineComments.length > 0) {
+        await gitClient.createPullRequestLineComments(
+          requestDto.owner,
+          requestDto.repo,
+          pullRequestInfo.number,
+          lineComments,
+        );
+      }
 
       // 添加评论
       await gitClient.createPullRequestComment(
-        parsedData.owner,
-        parsedData.repo,
+        requestDto.owner,
+        requestDto.repo,
         pullRequestInfo.number,
         reviewResult.detailComment,
       );
@@ -226,7 +245,7 @@ export class ReviewService {
       // 发送通知
       await this.sendReviewNotification(
         reviewResult,
-        parsedData.projectName,
+        requestDto.projectName,
         pullRequestInfo,
         projectConfig,
       );
@@ -246,7 +265,9 @@ export class ReviewService {
     }
   }
 
-  async handlePush(parsedData: ParsedWebhookData): Promise<void> {
+  async handlePush(
+    gitClient: GitClientInterface,
+    requestDto: ParsedPushReviewData): Promise<void> {
     try {
       const pushReviewEnabled =
         this.configService.get<string>('PUSH_REVIEW_ENABLED') === '1';
@@ -256,13 +277,11 @@ export class ReviewService {
         return;
       }
 
-      const gitClient = this.getGitClient(parsedData);
-
       const projectConfig = await this.getProjectConfig(
         gitClient,
-        parsedData.owner,
-        parsedData.repo,
-        parsedData.branchName,
+        requestDto.owner,
+        requestDto.repo,
+        requestDto.branch,
       );
 
       if (!projectConfig.review.enabled) {
@@ -273,7 +292,7 @@ export class ReviewService {
       const shouldTrigger = shouldTriggerReview(
         projectConfig.trigger,
         'push',
-        parsedData.branchName,
+        requestDto.branch,
       );
 
       if (!shouldTrigger) {
@@ -283,12 +302,12 @@ export class ReviewService {
         );
         return;
       }
-      const lastCommit = parsedData.commits[parsedData.commits.length - 1];
+      const commitSha = requestDto.commitSha;
 
       const pushInfo = await gitClient.getPushInfo(
-        parsedData.owner,
-        parsedData.repo,
-        lastCommit.id,
+        requestDto.owner,
+        requestDto.repo,
+        commitSha,
       );
 
       pushInfo.files = filterReviewableFiles(
@@ -298,7 +317,7 @@ export class ReviewService {
 
       const shouldSkip = await shouldSkipReview(projectConfig, {
         eventType: 'push',
-        branchName: parsedData.branchName,
+        branchName: requestDto.branch,
         files: pushInfo.files,
       });
 
@@ -310,9 +329,9 @@ export class ReviewService {
       const loadedReferences = await this.loadProjectReferences(
         projectConfig,
         gitClient,
-        parsedData.owner,
-        parsedData.repo,
-        parsedData.branchName,
+        requestDto.owner,
+        requestDto.repo,
+        requestDto.branch,
       );
 
       // 生成代码审查
@@ -324,6 +343,10 @@ export class ReviewService {
         commitMessages,
         loadedReferences,
         projectConfig,
+        {
+          llmProvider: requestDto.llmProvider,
+          llmProviderApiKey: requestDto.llmProviderApiKey,
+        }
       );
 
       // 保存到数据库
@@ -331,7 +354,7 @@ export class ReviewService {
       const deletions = calculateDeletions(pushInfo.files);
 
       await this.databaseService.createPushReview({
-        projectName: parsedData.projectName,
+        projectName: requestDto.projectName,
         author: pushInfo.author,
         branch: pushInfo.branch,
         updatedAt: Date.now(),
@@ -346,8 +369,8 @@ export class ReviewService {
       // 添加评论
       const pushLastCommit = pushInfo.commits[pushInfo.commits.length - 1];
       await gitClient.createCommitComment(
-        parsedData.owner,
-        parsedData.repo,
+        requestDto.owner,
+        requestDto.repo,
         pushLastCommit.id,
         reviewResult.detailComment,
       );
@@ -355,32 +378,13 @@ export class ReviewService {
       // 发送通知
       await this.sendReviewNotification(
         reviewResult,
-        parsedData.projectName,
+        requestDto.projectName,
         null,
         projectConfig,
       );
     } catch (error) {
       logger.error('Push review failed:', 'ReviewService', error.message);
     }
-  }
-
-  private getGitClient(parsedData: ParsedWebhookData): GitClientInterface {
-    return this.gitFactory.createGitClient(parsedData.clientType);
-  }
-
-  private async getProjectConfig(
-    gitClient: GitClientInterface,
-    owner: string,
-    repo: string,
-    ref: string,
-  ): Promise<ProjectConfig> {
-    const [yamlConfig, ymlConfig] = await Promise.all([
-      gitClient.getContentAsText(owner, repo, '.codereview.yaml', ref),
-      gitClient.getContentAsText(owner, repo, '.codereview.yml', ref),
-    ]);
-    const configContent = yamlConfig || ymlConfig;
-    const config = parseConfig(configContent);
-    return config;
   }
 
   /**
@@ -408,8 +412,12 @@ export class ReviewService {
     commitMessages: string,
     references: string[],
     config: ProjectConfig,
+    options?: {
+      llmProvider?: string;
+      llmProviderApiKey?: string;
+    }
   ): Promise<LLMReviewResult> {
-    const llmClient = this.llmFactory.getClient();
+    const llmClient = this.llmFactory.getClient(options?.llmProvider, options?.llmProviderApiKey);
 
     const diff = formatDiffs(changes);
 

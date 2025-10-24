@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   GitClientInterface,
@@ -12,11 +12,12 @@ import {
 export abstract class BaseGitClient implements GitClientInterface {
   protected config: GitClientConfig;
 
-  constructor(protected configService: ConfigService) {
-    this.config = this.initializeConfig();
+
+  constructor(protected configService: ConfigService, @Optional() accessToken?: string) {
+    this.config = this.initializeConfig(accessToken);
   }
 
-  protected abstract initializeConfig(): GitClientConfig;
+  protected abstract initializeConfig(accessToken?: string): GitClientConfig;
 
  
   abstract getPullRequestInfo(

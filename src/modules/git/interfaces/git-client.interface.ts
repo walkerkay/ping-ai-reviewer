@@ -1,3 +1,4 @@
+import { ParsedPullRequestReviewData, ParsedPushReviewData } from "./review.interface";
 
 export interface FileChange {
   filename: string;
@@ -96,7 +97,7 @@ export interface GitClientInterface {
   parseWebhookData(
     webhookData: any,
     eventType?: string,
-  ): ParsedWebhookData | null;
+  ): ParsedPushReviewData | ParsedPullRequestReviewData | null;
 
   getPullRequestInfo(
     owner: string,

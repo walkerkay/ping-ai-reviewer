@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   LLMClient,
@@ -14,6 +14,7 @@ export abstract class BaseLLMClient implements LLMClient {
   constructor(
     protected configService: ConfigService,
     protected provider: string,
+    @Optional() protected providerApiKey?: string,
   ) {
     this.config = this.getConfig();
   }
@@ -31,7 +32,7 @@ export abstract class BaseLLMClient implements LLMClient {
   abstract generateReport(commits: any[]): Promise<string>;
 
   protected getApiKey(): string {
-    return this.configService.get<string>(
+    return this.providerApiKey || this.configService.get<string>(
       `${this.provider.toUpperCase()}_API_KEY`,
     );
   }
