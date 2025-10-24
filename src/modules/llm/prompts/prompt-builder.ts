@@ -1,5 +1,5 @@
-import { systemPrompt } from './base/system';
 import { outroPrompt } from './base/outro';
+import { systemPrompt } from './base/system';
 import { lightPrompt } from './modes/light';
 import { strictPrompt } from './modes/strict';
 
@@ -13,6 +13,7 @@ export class PromptBuilder {
     language: 'zh' | 'en';
     mode: 'light' | 'strict';
     max_review_length: number;
+    pingcodeInfo?: string;
   }): PromptMessage[] {
     const promptMessages = [{ role: 'system', content: systemPrompt() }];
 
@@ -23,6 +24,7 @@ export class PromptBuilder {
           commitMessages: payload.commitMessages,
           diff: payload.diff,
           references: payload.references,
+          pingcodeInfo: payload.pingcodeInfo,
         }),
       });
     } else {
@@ -32,6 +34,7 @@ export class PromptBuilder {
           commitMessages: payload.commitMessages,
           diff: payload.diff,
           references: payload.references,
+          pingcodeInfo: payload.pingcodeInfo,
         }),
       });
     }

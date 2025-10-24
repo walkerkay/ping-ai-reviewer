@@ -148,6 +148,7 @@ export class ReviewService {
         changeCommits.map((commit) => commit.message).join('; '),
         allReferences,
         projectConfig,
+        pullRequestInfo,
       );
 
       // 创建或更新review记录
@@ -317,6 +318,7 @@ export class ReviewService {
         commitMessages,
         loadedReferences,
         projectConfig,
+        null,
       );
 
       // 保存到数据库
@@ -401,16 +403,36 @@ export class ReviewService {
     commitMessages: string,
     references: string[],
     config: ProjectConfig,
+    pullRequestInfo?: PullRequestInfo,
   ): Promise<LLMReviewResult> {
     const llmClient = this.llmFactory.getClient();
 
     const diff = formatDiffs(changes);
+
+    let pingcodeInfo: string | undefined;
+
+    if (pullRequestInfo?.title && config.integrations?.pingcode) {
+      try {
+        pingcodeInfo =
+          (await this.integrationService.getPingcodeWorkItemDetailsFromTitle(
+            pullRequestInfo.title,
+            config.integrations.pingcode,
+          )) || undefined;
+      } catch (error) {
+        logger.warn(
+          'Failed to get pingcode work item details:',
+          'ReviewService',
+          error.message,
+        );
+      }
+    }
 
     return await llmClient.generateReview(
       diff,
       commitMessages,
       references,
       config,
+      pingcodeInfo,
     );
   }
 

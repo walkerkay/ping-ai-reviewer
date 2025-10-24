@@ -1,9 +1,10 @@
+import { HttpService } from '@nestjs/axios';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
-import { BaseLLMClient } from './base-llm.client';
+import { ProjectConfig } from '../../core/config';
 import { LLMConfig, LLMReviewResult } from '../interfaces/llm-client.interface';
+import { BaseLLMClient } from './base-llm.client';
 
 @Injectable()
 export class OpenAIClient extends BaseLLMClient {
@@ -27,8 +28,11 @@ export class OpenAIClient extends BaseLLMClient {
   async generateReview(
     diff: string,
     commitMessages: string,
+    references: string[],
+    config: ProjectConfig,
+    pingcodeInfo?: string,
   ): Promise<LLMReviewResult> {
-    const prompt = this.buildReviewPrompt(diff, commitMessages);
+    const prompt = this.buildReviewPrompt(diff, commitMessages, pingcodeInfo);
 
     try {
       const response = await firstValueFrom(
@@ -108,9 +112,22 @@ export class OpenAIClient extends BaseLLMClient {
     }
   }
 
-  private buildReviewPrompt(diff: string, commitMessages: string): string {
-    return `
-Please review the following code changes:
+  private buildReviewPrompt(
+    diff: string,
+    commitMessages: string,
+    pingcodeInfo?: string,
+  ): string {
+    let prompt = `
+Please review the following code changes:`;
+
+    if (pingcodeInfo) {
+      prompt += `
+
+Work Item Information:
+${pingcodeInfo}`;
+    }
+
+    prompt += `
 
 Commit messages: ${commitMessages}
 
@@ -128,6 +145,8 @@ Please review from the following perspectives:
 
 Please provide specific improvement suggestions and code examples.
     `.trim();
+
+    return prompt;
   }
 
   private buildReportPrompt(commits: any[]): string {

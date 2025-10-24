@@ -1,5 +1,5 @@
-import { outputExample } from '../prompts/base/outro';
 import { ProjectConfig } from '../../core/config';
+import { outputExample } from '../prompts/base/outro';
 
 export type LLMReviewResult = typeof outputExample;
 
@@ -9,9 +9,10 @@ export interface LLMClient {
     commitMessages: string,
     references: string[],
     config: ProjectConfig,
+    pingcodeInfo?: string,
   ): Promise<LLMReviewResult>;
   generateReport(commits: any[]): Promise<string>;
-} 
+}
 
 export interface LLMConfig {
   apiKey: string;

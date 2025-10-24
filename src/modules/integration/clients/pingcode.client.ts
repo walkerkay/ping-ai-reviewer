@@ -1,13 +1,11 @@
+import { HttpService } from '@nestjs/axios';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
-import { NotificationMessage } from '../interfaces/integration-client.interface';
+import { ProjectIntegrationConfig } from '../../core/config';
 import { logger } from '../../core/logger';
+import { NotificationMessage } from '../interfaces/integration-client.interface';
 import { BaseIntegrationClient } from './base-client';
-import {
-  ProjectIntegrationConfig,
-} from '../../core/config';
 
 @Injectable()
 export class PingCodeClient extends BaseIntegrationClient<ProjectIntegrationConfig> {
@@ -180,5 +178,72 @@ export class PingCodeClient extends BaseIntegrationClient<ProjectIntegrationConf
       );
       return null;
     }
+  }
+
+  async getWorkItemDetails(identifier: string): Promise<{
+    title: string;
+    description: string;
+  } | null> {
+    try {
+      const token = await this.getAccessToken();
+      if (!token) {
+        return null;
+      }
+
+      const response = await firstValueFrom(
+        this.httpService.get(`${this.apiUrl}/v1/project/work_items`, {
+          params: {
+            identifier: identifier,
+          },
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        }),
+      );
+
+      if (
+        response.data &&
+        response.data.values &&
+        response.data.values.length > 0
+      ) {
+        const workItem = response.data.values[0];
+        return {
+          title: workItem.title || '',
+          description: workItem.description || '',
+        };
+      }
+
+      return null;
+    } catch (error) {
+      logger.error(
+        `Failed to get work item details for identifier ${identifier}:`,
+        'PingCodeClient',
+        error.message,
+      );
+      return null;
+    }
+  }
+
+  async getWorkItemDetailsFromTitle(prTitle: string): Promise<string | null> {
+    const identifier = this.extractIdentifier(prTitle);
+    if (!identifier) {
+      return null;
+    }
+
+    const details = await this.getWorkItemDetails(identifier);
+    if (!details) {
+      return null;
+    }
+
+    const infoParts: string[] = [];
+    if (details.title) {
+      infoParts.push(`标题：${details.title}`);
+    }
+    if (details.description) {
+      infoParts.push(`描述：${details.description}`);
+    }
+
+    return infoParts.length > 0 ? infoParts.join('\n') : null;
   }
 }

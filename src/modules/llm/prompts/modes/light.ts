@@ -2,6 +2,7 @@ export function lightPrompt(content: {
   commitMessages: string;
   diff: string;
   references?: string[];
+  pingcodeInfo?: string;
 }): string {
   return `
       请对以下代码变更进行轻量审查：
@@ -12,6 +13,7 @@ export function lightPrompt(content: {
 
         参考信息：
         ${content.references?.map((reference) => `- ${reference}`).join('\n')}
+        ${content.pingcodeInfo ? `\n- 工作项信息：${content.pingcodeInfo}` : ''}
         \n\n
         提交信息：
         ${content.commitMessages}

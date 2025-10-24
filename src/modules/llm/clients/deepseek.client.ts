@@ -1,11 +1,11 @@
+import { ProjectConfig } from '@/modules/core/config';
+import { HttpService } from '@nestjs/axios';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
-import { BaseLLMClient } from './base-llm.client';
 import { LLMConfig, LLMReviewResult } from '../interfaces/llm-client.interface';
 import { PromptBuilder } from '../prompts/prompt-builder';
-import { ProjectConfig } from '@/modules/core/config';
+import { BaseLLMClient } from './base-llm.client';
 
 @Injectable()
 export class DeepSeekClient extends BaseLLMClient {
@@ -31,6 +31,7 @@ export class DeepSeekClient extends BaseLLMClient {
     commitMessages: string,
     references: string[],
     config: ProjectConfig,
+    pingcodeInfo?: string,
   ): Promise<LLMReviewResult> {
     const promptMessages = PromptBuilder.buildReviewPrompt({
       language: config.review.language,
@@ -39,6 +40,7 @@ export class DeepSeekClient extends BaseLLMClient {
       diff,
       references,
       commitMessages,
+      pingcodeInfo,
     });
 
     try {
