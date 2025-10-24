@@ -46,6 +46,7 @@ export class MergeRequestReview {
     lastCommitId: string;
     createdAt: number;
     llmResult: string;
+    summary: string;
   }[];
 
   @Prop({ default: () => Date.now() })
