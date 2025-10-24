@@ -263,7 +263,7 @@ export class GitHubClient extends BaseGitClient {
     const owner = repository.owner?.login || '';
     const repo = repository.name || '';
     const commits = webhookData.commits || [];
-    const commitId = commits.length > 0 ? commits[commits.length - 1].id : "";
+    const commitSha = commits.length > 0 ? commits[commits.length - 1].id : "";
     return {
       owner,
       repo,
@@ -272,7 +272,7 @@ export class GitHubClient extends BaseGitClient {
       sourceBranch: pullRequest.head?.ref,
       targetBranch: pullRequest.base?.ref,
       mrState: pullRequest.state,
-      commitId: commitId,
+      commitSha: commitSha,
       eventType: 'pull_request'
     };
   }
@@ -284,14 +284,14 @@ export class GitHubClient extends BaseGitClient {
     const commits = webhookData.commits || [];
     const owner = repository.owner?.login || '';
     const repo = repository.name || '';
-    const commitId = commits.length > 0 ? commits[commits.length - 1].id : "";
+    const commitSha = commits.length > 0 ? commits[commits.length - 1].id : "";
 
     return {
       owner,
       repo,
       projectName: repository.full_name,
       branch: branchName,
-      commitId: commitId,
+      commitSha: commitSha,
       eventType: 'push'
     };
   }

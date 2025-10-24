@@ -6,8 +6,7 @@ import {
   PullRequestInfo,
   PushInfo,
   FileChange,
-  CommitInfo,
-  ParsedWebhookData,
+  CommitInfo
 } from '../interfaces/git-client.interface';
 import { GitLabWebhookDto } from '../../webhook/dto/webhook.dto';
 import { DiffRefsSchema, Gitlab } from '@gitbeaker/rest';
@@ -378,14 +377,14 @@ export class GitLabClient extends BaseGitClient {
     const ref = webhookData.ref || '';
     const branchName = ref.replace('refs/heads/', '');
     const commits = webhookData.commits || [];
-    const commitId = commits.length > 0 ? commits[commits.length - 1].id : '';
+    const commitSha = commits.length > 0 ? commits[commits.length - 1].id : '';
     return {
       eventType: 'push',
       owner: project.path_with_namespace?.split('/')[0] || '',
       repo: project.id?.toString() || '',
       projectName: project.name,
       branch: branchName,
-      commitId: commitId
+      commitSha: commitSha
     };
   }
 }
