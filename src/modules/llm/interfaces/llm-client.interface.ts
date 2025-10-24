@@ -9,7 +9,6 @@ export interface LLMClient {
     commitMessages: string,
     references: string[],
     config: ProjectConfig,
-    pingcodeInfo?: string,
   ): Promise<LLMReviewResult>;
   generateReport(commits: any[]): Promise<string>;
 }

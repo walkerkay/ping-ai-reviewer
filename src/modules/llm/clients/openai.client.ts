@@ -30,9 +30,8 @@ export class OpenAIClient extends BaseLLMClient {
     commitMessages: string,
     references: string[],
     config: ProjectConfig,
-    pingcodeInfo?: string,
   ): Promise<LLMReviewResult> {
-    const prompt = this.buildReviewPrompt(diff, commitMessages, pingcodeInfo);
+    const prompt = this.buildReviewPrompt(diff, commitMessages);
 
     try {
       const response = await firstValueFrom(
@@ -112,22 +111,9 @@ export class OpenAIClient extends BaseLLMClient {
     }
   }
 
-  private buildReviewPrompt(
-    diff: string,
-    commitMessages: string,
-    pingcodeInfo?: string,
-  ): string {
-    let prompt = `
-Please review the following code changes:`;
-
-    if (pingcodeInfo) {
-      prompt += `
-
-Work Item Information:
-${pingcodeInfo}`;
-    }
-
-    prompt += `
+  private buildReviewPrompt(diff: string, commitMessages: string): string {
+    return `
+Please review the following code changes:
 
 Commit messages: ${commitMessages}
 
@@ -145,8 +131,6 @@ Please review from the following perspectives:
 
 Please provide specific improvement suggestions and code examples.
     `.trim();
-
-    return prompt;
   }
 
   private buildReportPrompt(commits: any[]): string {

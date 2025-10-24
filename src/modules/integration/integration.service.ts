@@ -90,7 +90,10 @@ export class IntegrationService {
           type as IntegrationClientType,
           integrationConfig,
         );
-        if (client.isEnabled() && integrationConfig.push_summary?.summary_field) {
+        if (
+          client.isEnabled() &&
+          integrationConfig.push_summary?.summary_field
+        ) {
           await client.pushSummary?.(
             prTitle,
             integrationConfig.push_summary?.summary_field,
@@ -99,5 +102,24 @@ export class IntegrationService {
         }
       }),
     );
+  }
+
+  async getCustomPrompt(
+    prTitle: string,
+    config: ProjectConfig['integrations'],
+  ): Promise<string | null> {
+    for (const [type, integrationConfig] of Object.entries(config)) {
+      const client = this.createClient(
+        type as IntegrationClientType,
+        integrationConfig,
+      );
+      if (client.isEnabled() && client.getCustomPrompt) {
+        const customPrompt = await client.getCustomPrompt(prTitle);
+        if (customPrompt) {
+          return customPrompt;
+        }
+      }
+    }
+    return null;
   }
 }

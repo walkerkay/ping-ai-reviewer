@@ -416,15 +416,17 @@ export class ReviewService {
 
     const diff = formatDiffs(changes);
 
-    let pingcodeInfo: string | undefined;
+    let allReferences = [...references];
 
-    if (pullRequestInfo?.title && config.integrations?.pingcode) {
+    if (pullRequestInfo?.title) {
       try {
-        pingcodeInfo =
-          (await this.integrationService.getPingcodeWorkItemDetailsFromTitle(
-            pullRequestInfo.title,
-            config.integrations.pingcode,
-          )) || undefined;
+        const prompt = await this.integrationService.getCustomPrompt(
+          pullRequestInfo.title,
+          config.integrations,
+        );
+        if (prompt) {
+          allReferences.push(`${prompt}`);
+        }
       } catch (error) {
         logger.warn(
           'Failed to get pingcode work item details:',
@@ -437,9 +439,8 @@ export class ReviewService {
     return await llmClient.generateReview(
       diff,
       commitMessages,
-      references,
+      allReferences,
       config,
-      pingcodeInfo,
     );
   }
 

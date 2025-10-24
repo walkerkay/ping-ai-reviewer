@@ -2,7 +2,6 @@ export function strictPrompt(content: {
   commitMessages: string;
   diff: string;
   references?: string[];
-  pingcodeInfo?: string;
 }): string {
   return `
     请对以下代码变更进行严格审查：
@@ -15,7 +14,6 @@ export function strictPrompt(content: {
 
     参考信息：
     ${content.references?.map((reference) => `- ${reference}`).join('\n')}
-    ${content.pingcodeInfo ? `\n- 工作项信息：${content.pingcodeInfo}` : ''}
     \n\n  
 
     提交信息：

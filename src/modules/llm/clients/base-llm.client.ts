@@ -25,7 +25,6 @@ export abstract class BaseLLMClient implements LLMClient {
     commitMessages: string,
     references: string[],
     config: ProjectConfig,
-    pingcodeInfo?: string,
   ): Promise<LLMReviewResult>;
 
   abstract generateReport(commits: any[]): Promise<string>;

@@ -25,4 +25,6 @@ export interface IntegrationClientInterface {
     field: string,
     summary: string,
   ): Promise<boolean>;
+
+  getCustomPrompt?(prTitle: string): Promise<string | null>;
 }

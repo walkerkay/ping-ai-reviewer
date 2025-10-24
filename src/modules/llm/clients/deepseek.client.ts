@@ -31,7 +31,6 @@ export class DeepSeekClient extends BaseLLMClient {
     commitMessages: string,
     references: string[],
     config: ProjectConfig,
-    pingcodeInfo?: string,
   ): Promise<LLMReviewResult> {
     const promptMessages = PromptBuilder.buildReviewPrompt({
       language: config.review.language,
@@ -40,7 +39,6 @@ export class DeepSeekClient extends BaseLLMClient {
       diff,
       references,
       commitMessages,
-      pingcodeInfo,
     });
 
     try {

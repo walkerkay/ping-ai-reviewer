@@ -327,4 +327,23 @@ export class PingCodeClient extends BaseIntegrationClient<ProjectIntegrationConf
 
     return infoParts.length > 0 ? infoParts.join('\n') : null;
   }
+
+  async getCustomPrompt(prTitle: string): Promise<string | null> {
+    try {
+      const pingcodeInfo = await this.getWorkItemDetailsFromTitle(prTitle);
+
+      if (pingcodeInfo) {
+        return `- 这是工作项任务：${pingcodeInfo}，请参考`;
+      }
+
+      return null;
+    } catch (error) {
+      logger.error(
+        'Failed to get custom prompt:',
+        'PingCodeClient',
+        error.message,
+      );
+      return null;
+    }
+  }
 }
