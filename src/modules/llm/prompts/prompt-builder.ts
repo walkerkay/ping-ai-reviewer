@@ -10,7 +10,7 @@ export class PromptBuilder {
     diff?: string;
     commitMessages?: string;
     references?: string[];
-    language: 'zh' | 'en';
+    language: 'zh' | 'en'; 
     mode: 'light' | 'strict';
     max_review_length: number;
     pingcodeInfo?: string;
@@ -41,7 +41,10 @@ export class PromptBuilder {
 
     promptMessages.push({
       role: 'user',
-      content: outroPrompt(payload.language, payload.max_review_length),
+      content: outroPrompt(
+        payload.language,
+        payload.max_review_length, 
+      ),
     });
 
     return promptMessages as PromptMessage[];

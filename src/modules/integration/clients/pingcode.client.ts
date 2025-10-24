@@ -7,6 +7,13 @@ import { logger } from '../../core/logger';
 import { NotificationMessage } from '../interfaces/integration-client.interface';
 import { BaseIntegrationClient } from './base-client';
 
+const workItemCache: Map<
+  string,
+  { id: string; title: string; description: string }
+> = new Map();
+
+const tokenCache: Map<string, string> = new Map();
+
 @Injectable()
 export class PingCodeClient extends BaseIntegrationClient<ProjectIntegrationConfig> {
   private accessToken: string | null = null;
@@ -31,6 +38,54 @@ export class PingCodeClient extends BaseIntegrationClient<ProjectIntegrationConf
 
   validateConfig(): boolean {
     return !!this.apiUrl && !!this.clientId && !!this.clientSecret;
+  }
+
+  async pushSummary(
+    prTitle: string,
+    field: string,
+    summary: string,
+  ): Promise<boolean> {
+    try {
+      const token = await this.getAccessToken();
+
+      const workItemIdentifier = this.extractIdentifier(prTitle);
+
+      if (!workItemIdentifier) {
+        logger.info(
+          'No work item identifier found in message content',
+          'PingCodeClient',
+        );
+        return false;
+      }
+
+      const workItemId = await this.getWorkItemId(workItemIdentifier, token);
+
+      if (workItemId) {
+        summary = `🤖 ${summary}`;
+        const response = await firstValueFrom(
+          this.httpService.patch(
+            `${this.apiUrl}/v1/project/work_items/${workItemId}`,
+            {
+              [field]: summary,
+              [`properties.${field}`]: summary,
+            },
+            {
+              headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json',
+              },
+            },
+          ),
+        );
+        return response.status === 200 || response.status === 201;
+      }
+    } catch (error) {
+      logger.error(
+        'PingCode push summary failed:',
+        'PingCodeClient',
+        error.message,
+      );
+    }
   }
 
   async sendNotification(message: NotificationMessage): Promise<boolean> {
@@ -94,7 +149,7 @@ export class PingCodeClient extends BaseIntegrationClient<ProjectIntegrationConf
     let content = '';
 
     if (message.additions?.pullRequest?.title) {
-      content += `🔗 URL: ${message.additions?.pullRequest?.url}\n`;
+      content += `🤖 代码审查完成\nURL: ${message.additions?.pullRequest?.url}\n`;
     }
     content += message.content;
 
@@ -111,8 +166,9 @@ export class PingCodeClient extends BaseIntegrationClient<ProjectIntegrationConf
   }
 
   private async getAccessToken(): Promise<string | null> {
-    if (this.accessToken) {
-      return this.accessToken;
+    const cached = tokenCache.get(this.clientId);
+    if (cached) {
+      return cached;
     }
     try {
       const response = await firstValueFrom(
@@ -130,6 +186,7 @@ export class PingCodeClient extends BaseIntegrationClient<ProjectIntegrationConf
 
       if (response.data && response.data.access_token) {
         this.accessToken = response.data.access_token;
+        tokenCache.set(this.clientId, response.data.access_token);
         return response.data.access_token;
       }
       logger.error('Failed to get PingCode access token', 'PingCodeClient');
@@ -144,52 +201,11 @@ export class PingCodeClient extends BaseIntegrationClient<ProjectIntegrationConf
     }
   }
 
-  private async getWorkItemId(
+  private async fetchWorkItemFromAPI(
     identifier: string,
     token: string,
-  ): Promise<string | null> {
+  ): Promise<{ id: string; title: string; description: string } | null> {
     try {
-      const response = await firstValueFrom(
-        this.httpService.get(`${this.apiUrl}/v1/project/work_items`, {
-          params: {
-            identifier: identifier,
-          },
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        }),
-      );
-
-      if (
-        response.data &&
-        response.data.values &&
-        response.data.values.length > 0
-      ) {
-        return response.data.values[0].id;
-      }
-
-      return null;
-    } catch (error) {
-      logger.error(
-        `Failed to get work item ID for identifier ${identifier}:`,
-        'PingCodeClient',
-        error.message,
-      );
-      return null;
-    }
-  }
-
-  async getWorkItemDetails(identifier: string): Promise<{
-    title: string;
-    description: string;
-  } | null> {
-    try {
-      const token = await this.getAccessToken();
-      if (!token) {
-        return null;
-      }
-
       const response = await firstValueFrom(
         this.httpService.get(`${this.apiUrl}/v1/project/work_items`, {
           params: {
@@ -208,13 +224,78 @@ export class PingCodeClient extends BaseIntegrationClient<ProjectIntegrationConf
         response.data.values.length > 0
       ) {
         const workItem = response.data.values[0];
-        return {
+        const workItemData = {
+          id: workItem.id,
           title: workItem.title || '',
           description: workItem.description || '',
         };
+
+        // 缓存工作项详情
+        workItemCache.set(identifier, workItemData);
+
+        return workItemData;
       }
 
       return null;
+    } catch (error) {
+      logger.error(
+        `Failed to fetch work item for identifier ${identifier}:`,
+        'PingCodeClient',
+        error.message,
+      );
+      return null;
+    }
+  }
+
+  private async getWorkItemId(
+    identifier: string,
+    token: string,
+  ): Promise<string | null> {
+    try {
+      const cached = workItemCache.get(identifier);
+      if (cached) {
+        return cached.id;
+      }
+
+      const workItemData = await this.fetchWorkItemFromAPI(identifier, token);
+      return workItemData?.id || null;
+    } catch (error) {
+      logger.error(
+        `Failed to get work item ID for identifier ${identifier}:`,
+        'PingCodeClient',
+        error.message,
+      );
+      return null;
+    }
+  }
+
+  async getWorkItemDetails(identifier: string): Promise<{
+    title: string;
+    description: string;
+  } | null> {
+    try {
+      const cached = workItemCache.get(identifier);
+      if (cached) {
+        return {
+          title: cached.title,
+          description: cached.description,
+        };
+      }
+
+      const token = await this.getAccessToken();
+      if (!token) {
+        return null;
+      }
+
+      const workItemData = await this.fetchWorkItemFromAPI(identifier, token);
+      if (!workItemData) {
+        return null;
+      }
+
+      return {
+        title: workItemData.title,
+        description: workItemData.description,
+      };
     } catch (error) {
       logger.error(
         `Failed to get work item details for identifier ${identifier}:`,

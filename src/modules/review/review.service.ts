@@ -231,6 +231,13 @@ export class ReviewService {
         pullRequestInfo,
         projectConfig,
       );
+
+      // 推送总结到集成
+      await this.pushSummaryToIntegration(
+        pullRequestInfo,
+        reviewResult.overview,
+        projectConfig,
+      );
     } catch (error) {
       logger.error(
         'Pull request review failed:',
@@ -459,6 +466,21 @@ export class ReviewService {
             }
           : undefined,
       },
+      projectConfig.integrations,
+    );
+  }
+
+  private async pushSummaryToIntegration(
+    pullRequestInfo: PullRequestInfo | null,
+    summary: string,
+    projectConfig: ProjectConfig,
+  ): Promise<void> {
+    if (!summary) {
+      return;
+    }
+    await this.integrationService.pushSummary(
+      pullRequestInfo?.title,
+      summary,
       projectConfig.integrations,
     );
   }
