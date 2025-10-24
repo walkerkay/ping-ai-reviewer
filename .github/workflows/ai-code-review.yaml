@@ -4,6 +4,10 @@ on:
     types: [opened, reopened, synchronize, ready_for_review]
   workflow_dispatch:
 
+permissions:
+  pull-requests: read  
+  issues: write
+
 jobs:
   call-ai-review-api:
     runs-on: ubuntu-latest
