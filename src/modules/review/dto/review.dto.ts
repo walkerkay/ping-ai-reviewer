@@ -44,7 +44,7 @@ export class ReviewRequestDto {
 
     @IsString()
     @IsOptional()
-    commitId?: string;
+    commitSha?: string;
 
     @IsString()
     @IsNotEmpty()

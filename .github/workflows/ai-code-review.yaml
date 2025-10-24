@@ -24,7 +24,7 @@ jobs:
           PR_STATE: ${{ github.event.pull_request.state || null }}
           SOURCE_BRANCH: ${{ github.event.pull_request.head.ref || null }}
           TARGET_BRANCH: ${{ github.event.pull_request.base.ref || null }}
-          COMMIT_ID: ${{ github.sha }}
+          COMMIT_SHA: ${{ github.sha }}
           EVENT_TYPE: ${{ github.event_name }}
           PROJECT_ID: ${{ github.repository_id }}
           PROJECT_NAME: ${{ github.repository_name }}
@@ -38,7 +38,7 @@ jobs:
           REQUEST_BODY=$(jq -n \
             --arg repo "$REPO" \
             --argjson mrNumber "$PR_NUMBER" \
-            --arg commitId "$COMMIT_ID" \
+            --arg commitSha "$COMMIT_SHA" \
             --arg eventType "$EVENT_TYPE" \
             --arg token "$GITHUB_TOKEN" \
             --arg mrState "$PR_STATE" \
@@ -52,7 +52,7 @@ jobs:
             '{
               "repo": $repo,
               "mrNumber": $mrNumber,
-              "commitId": $commitId,
+              "commitSha": $commitSha,
               "eventType": $eventType,
               "token": $token,
               "mrState": $mrState,

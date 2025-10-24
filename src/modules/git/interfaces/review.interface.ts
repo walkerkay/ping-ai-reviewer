@@ -8,7 +8,7 @@ interface ReviewLLMOption {
 export interface ParsedPushReviewData extends ReviewLLMOption {
     repo: string;
     owner: string;
-    commitId: string;
+    commitSha: string;
     branch: string;
     projectName: string;
     eventType: string;
@@ -19,7 +19,7 @@ export interface ParsedPullRequestReviewData extends ReviewLLMOption {
     owner: string;
     mrNumber: number;
     mrState: string;
-    commitId?: string;
+    commitSha?: string;
     sourceBranch: string;
     targetBranch: string;
     projectName: string;

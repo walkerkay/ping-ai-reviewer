@@ -302,7 +302,7 @@ export class ReviewService {
         );
         return;
       }
-      const commitSha = requestDto.commitId;
+      const commitSha = requestDto.commitSha;
 
       const pushInfo = await gitClient.getPushInfo(
         requestDto.owner,
