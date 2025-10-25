@@ -33,14 +33,24 @@ export class DeepSeekClient extends BaseLLMClient {
     references: string[],
     config: ProjectConfig,
   ): Promise<LLMReviewResult> {
-    const promptMessages = PromptBuilder.buildReviewPrompt({
+    const { messages, inputTokens } = PromptBuilder.buildReviewPrompt({
       language: config.review.language,
       mode: config.review.mode,
-      max_review_length: config.review.max_review_length,
+      max_output_tokens: config.review.max_output_tokens,
+      max_input_tokens: config.review.max_input_tokens,
       diff,
       references,
-      commitMessages
+      commitMessages,
     });
+
+    if (!messages) {
+      return {
+        overview: '',
+        detailComment: ``,
+        lineComments: [],
+        notification: '',
+      };
+    }
 
     try {
       const response = await firstValueFrom(
@@ -49,7 +59,7 @@ export class DeepSeekClient extends BaseLLMClient {
           {
             model: this.getModel(),
             response_format: { type: 'json_object' },
-            messages: promptMessages,
+            messages,
             temperature: this.getTemperature(),
             max_tokens: this.getMaxTokens(),
           },

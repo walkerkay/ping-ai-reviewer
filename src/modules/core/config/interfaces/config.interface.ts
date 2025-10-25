@@ -4,9 +4,9 @@ export interface ProjectConfig {
     enabled: boolean;
     language: 'zh' | 'en';
     mode: 'light' | 'strict';
-    max_review_length: number;
+    max_output_tokens: number;
+    max_input_tokens: number;
     max_files: number;
-    max_content_length: number;
   };
   files: {
     extensions: string[];

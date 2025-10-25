@@ -4,6 +4,8 @@ import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { BaseLLMClient } from './base-llm.client';
 import { LLMConfig, LLMReviewResult } from '../interfaces/llm-client.interface';
+import { PromptBuilder } from '../prompts/prompt-builder';
+import { ProjectConfig } from '../../core/config';
 
 @Injectable()
 export class OpenAIClient extends BaseLLMClient {
@@ -28,8 +30,27 @@ export class OpenAIClient extends BaseLLMClient {
   async generateReview(
     diff: string,
     commitMessages: string,
+    references: string[],
+    config: ProjectConfig,
   ): Promise<LLMReviewResult> {
-    const prompt = this.buildReviewPrompt(diff, commitMessages);
+    const { messages, inputTokens } = PromptBuilder.buildReviewPrompt({
+      language: config.review.language,
+      mode: config.review.mode,
+      max_output_tokens: config.review.max_output_tokens,
+      max_input_tokens: config.review.max_input_tokens,
+      diff,
+      references,
+      commitMessages
+    });
+
+    if (!messages) {
+      return {
+        overview: '',
+        detailComment: ``,
+        lineComments: [],
+        notification: '',
+      };
+    }
 
     try {
       const response = await firstValueFrom(
@@ -37,17 +58,7 @@ export class OpenAIClient extends BaseLLMClient {
           `${this.getBaseUrl()}/chat/completions`,
           {
             model: this.getModel(),
-            messages: [
-              {
-                role: 'system',
-                content:
-                  'You are a professional code review expert. Please review the code changes and provide constructive suggestions.',
-              },
-              {
-                role: 'user',
-                content: prompt,
-              },
-            ],
+            messages,
             temperature: this.getTemperature(),
             max_tokens: this.getMaxTokens(),
           },
