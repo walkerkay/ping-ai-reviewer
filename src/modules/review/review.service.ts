@@ -12,6 +12,10 @@ import {
   GitClientInterface,
   PullRequestInfo,
 } from '../git/interfaces/git-client.interface';
+import {
+  ParsedPullRequestReviewData,
+  ParsedPushReviewData,
+} from '../git/interfaces/review.interface';
 import { IntegrationService } from '../integration/integration.service';
 import { LLMReviewResult } from '../llm/interfaces/llm-client.interface';
 import { LLMFactory } from '../llm/llm.factory';
@@ -27,10 +31,6 @@ import {
   shouldTriggerReview,
   slugifyUrl,
 } from './review.utils';
-import {
-  ParsedPullRequestReviewData,
-  ParsedPushReviewData,
-} from '../git/interfaces/review.interface';
 
 @Injectable()
 export class ReviewService {
@@ -165,6 +165,7 @@ export class ReviewService {
         changeCommits.map((commit) => commit.message).join('; '),
         allReferences,
         projectConfig,
+        pullRequestInfo,
         {
           llmProvider: requestDto.llmProvider,
           llmProviderApiKey: requestDto.llmProviderApiKey,
@@ -353,6 +354,7 @@ export class ReviewService {
         commitMessages,
         loadedReferences,
         projectConfig,
+        null,
         {
           llmProvider: requestDto.llmProvider,
           llmProviderApiKey: requestDto.llmProviderApiKey,
@@ -422,6 +424,7 @@ export class ReviewService {
     commitMessages: string,
     references: string[],
     config: ProjectConfig,
+    pullRequestInfo?: PullRequestInfo,
     options?: {
       llmProvider?: string;
       llmProviderApiKey?: string;
@@ -434,10 +437,30 @@ export class ReviewService {
 
     const diff = formatDiffs(changes);
 
+    let allReferences = [...references];
+
+    if (pullRequestInfo?.title) {
+      try {
+        const prompt = await this.integrationService.getCustomPrompt(
+          pullRequestInfo.title,
+          config.integrations,
+        );
+        if (prompt) {
+          allReferences.push(`${prompt}`);
+        }
+      } catch (error) {
+        logger.warn(
+          'Failed to get pingcode work item details:',
+          'ReviewService',
+          error.message,
+        );
+      }
+    }
+
     return await llmClient.generateReview(
       diff,
       commitMessages,
-      references,
+      allReferences,
       config,
     );
   }

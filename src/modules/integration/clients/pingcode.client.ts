@@ -1,13 +1,16 @@
+import { HttpService } from '@nestjs/axios';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
-import { NotificationMessage } from '../interfaces/integration-client.interface';
-import { logger } from '../../core/logger';
-import { BaseIntegrationClient } from './base-client';
 import { ProjectIntegrationConfig } from '../../core/config';
+import { logger } from '../../core/logger';
+import { NotificationMessage } from '../interfaces/integration-client.interface';
+import { BaseIntegrationClient } from './base-client';
 
-const workItemCache: Map<string, { id: string }> = new Map();
+const workItemCache: Map<
+  string,
+  { id: string; title: string; description: string }
+> = new Map();
 
 const tokenCache: Map<string, string> = new Map();
 
@@ -198,15 +201,11 @@ export class PingCodeClient extends BaseIntegrationClient<ProjectIntegrationConf
     }
   }
 
-  private async getWorkItemId(
+  private async fetchWorkItemFromAPI(
     identifier: string,
     token: string,
-  ): Promise<string | null> {
+  ): Promise<{ id: string; title: string; description: string } | null> {
     try {
-      const cached = workItemCache.get(identifier);
-      if (cached) {
-        return cached.id;
-      }
       const response = await firstValueFrom(
         this.httpService.get(`${this.apiUrl}/v1/project/work_items`, {
           params: {
@@ -224,15 +223,123 @@ export class PingCodeClient extends BaseIntegrationClient<ProjectIntegrationConf
         response.data.values &&
         response.data.values.length > 0
       ) {
-        const workItemId = response.data.values[0].id;
-        workItemCache.set(identifier, { id: workItemId });
-        return workItemId;
+        const workItem = response.data.values[0];
+        const workItemData = {
+          id: workItem.id,
+          title: workItem.title || '',
+          description: workItem.description || '',
+        };
+
+        // 缓存工作项详情
+        workItemCache.set(identifier, workItemData);
+
+        return workItemData;
       }
 
       return null;
     } catch (error) {
       logger.error(
+        `Failed to fetch work item for identifier ${identifier}:`,
+        'PingCodeClient',
+        error.message,
+      );
+      return null;
+    }
+  }
+
+  private async getWorkItemId(
+    identifier: string,
+    token: string,
+  ): Promise<string | null> {
+    try {
+      const cached = workItemCache.get(identifier);
+      if (cached) {
+        return cached.id;
+      }
+
+      const workItemData = await this.fetchWorkItemFromAPI(identifier, token);
+      return workItemData?.id || null;
+    } catch (error) {
+      logger.error(
         `Failed to get work item ID for identifier ${identifier}:`,
+        'PingCodeClient',
+        error.message,
+      );
+      return null;
+    }
+  }
+
+  async getWorkItemDetails(identifier: string): Promise<{
+    title: string;
+    description: string;
+  } | null> {
+    try {
+      const cached = workItemCache.get(identifier);
+      if (cached) {
+        return {
+          title: cached.title,
+          description: cached.description,
+        };
+      }
+
+      const token = await this.getAccessToken();
+      if (!token) {
+        return null;
+      }
+
+      const workItemData = await this.fetchWorkItemFromAPI(identifier, token);
+      if (!workItemData) {
+        return null;
+      }
+
+      return {
+        title: workItemData.title,
+        description: workItemData.description,
+      };
+    } catch (error) {
+      logger.error(
+        `Failed to get work item details for identifier ${identifier}:`,
+        'PingCodeClient',
+        error.message,
+      );
+      return null;
+    }
+  }
+
+  async getWorkItemDetailsFromTitle(prTitle: string): Promise<string | null> {
+    const identifier = this.extractIdentifier(prTitle);
+    if (!identifier) {
+      return null;
+    }
+
+    const details = await this.getWorkItemDetails(identifier);
+    if (!details) {
+      return null;
+    }
+
+    const infoParts: string[] = [];
+    if (details.title) {
+      infoParts.push(`标题：${details.title}`);
+    }
+    if (details.description) {
+      infoParts.push(`描述：${details.description}`);
+    }
+
+    return infoParts.length > 0 ? infoParts.join('\n') : null;
+  }
+
+  async getCustomPrompt(prTitle: string): Promise<string | null> {
+    try {
+      const pingcodeInfo = await this.getWorkItemDetailsFromTitle(prTitle);
+
+      if (pingcodeInfo) {
+        return `- 这是工作项任务：${pingcodeInfo}，请参考`;
+      }
+
+      return null;
+    } catch (error) {
+      logger.error(
+        'Failed to get custom prompt:',
         'PingCodeClient',
         error.message,
       );

@@ -1,9 +1,10 @@
+import { HttpService } from '@nestjs/axios';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
-import { BaseLLMClient } from './base-llm.client';
+import { ProjectConfig } from '../../core/config';
 import { LLMConfig, LLMReviewResult } from '../interfaces/llm-client.interface';
+import { BaseLLMClient } from './base-llm.client';
 
 @Injectable()
 export class OpenAIClient extends BaseLLMClient {
@@ -28,6 +29,8 @@ export class OpenAIClient extends BaseLLMClient {
   async generateReview(
     diff: string,
     commitMessages: string,
+    references: string[],
+    config: ProjectConfig,
   ): Promise<LLMReviewResult> {
     const prompt = this.buildReviewPrompt(diff, commitMessages);
 

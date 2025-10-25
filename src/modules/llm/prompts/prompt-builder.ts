@@ -1,5 +1,5 @@
-import { systemPrompt } from './base/system';
 import { outroPrompt } from './base/outro';
+import { systemPrompt } from './base/system';
 import { lightPrompt } from './modes/light';
 import { strictPrompt } from './modes/strict';
 
@@ -10,7 +10,7 @@ export class PromptBuilder {
     diff?: string;
     commitMessages?: string;
     references?: string[];
-    language: 'zh' | 'en'; 
+    language: 'zh' | 'en';
     mode: 'light' | 'strict';
     max_review_length: number;
   }): PromptMessage[] {
@@ -38,10 +38,7 @@ export class PromptBuilder {
 
     promptMessages.push({
       role: 'user',
-      content: outroPrompt(
-        payload.language,
-        payload.max_review_length, 
-      ),
+      content: outroPrompt(payload.language, payload.max_review_length),
     });
 
     return promptMessages as PromptMessage[];
