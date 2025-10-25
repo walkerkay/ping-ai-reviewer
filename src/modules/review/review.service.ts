@@ -186,6 +186,7 @@ export class ReviewService {
             .join('; '),
           reviewResult.detailComment,
         ].join('\n\n'),
+        summary: reviewResult.overview,
       };
 
       // 如果是首次review，创建新记录；否则添加review记录
@@ -254,10 +255,15 @@ export class ReviewService {
         projectConfig,
       );
 
+      const summary = [...(existingReview?.reviewRecords ?? []), reviewRecord]
+        .filter((record) => record.summary)
+        .map((record) => `${record.summary}`)
+        .join('\n');
+
       // 推送总结到集成
       await this.pushSummaryToIntegration(
         pullRequestInfo,
-        reviewResult.overview,
+        summary,
         projectConfig,
       );
     } catch (error) {
